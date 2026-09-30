@@ -5,3 +5,7 @@ config.json
 vercel_build/
 .venv/
 .vercel/
+.env
+.env.*
+!.env.example
+!config.example.json

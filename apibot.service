@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=/root/ApiBot
+EnvironmentFile=/root/ApiBot/.env
 ExecStart=/usr/bin/python3 /root/ApiBot/api.py
 Restart=always
 RestartSec=3

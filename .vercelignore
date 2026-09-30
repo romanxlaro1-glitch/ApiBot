@@ -9,3 +9,7 @@ vercel_build/
 .venv/
 .vercel/
 .git/
+.env
+.env.*
+!.env.example
+!config.example.json
