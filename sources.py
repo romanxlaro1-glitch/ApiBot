@@ -24,6 +24,8 @@ import re
 import time
 
 import games as games_mod
+import jkt48 as jkt48_mod
+import play as play_mod
 import liquid as liquid_mod
 import ai as ai_mod
 import aiweb as aiweb_mod
@@ -32,6 +34,40 @@ import aiask as aiask_mod
 import pollinations as pollinations_mod
 import countries as country_mod
 import phone as phone_mod
+
+# Free-proxy pool for /ai/ask, probed in the background. Reads a local file the
+# operator refreshes; when it is missing or empty the route just uses no proxy.
+_FREE_PROXY_FILE = "/root/ApiBot/free_proxies.json"
+_free_proxies = {"list": [], "checked": 0, "at": 0.0}
+FREE_PROXY_MAX_AGE = 3600
+
+# Game sessions. In-process and deliberately small: a bot holds a handful of
+# games at a time, and anything stale should evaporate rather than accumulate.
+_SESSIONS = play_mod.Sessions(max_items=2000)
+
+
+def _load_free_proxies(force=False):
+    """Return the cached list of free proxies, reloading if it is stale.
+
+    The file is a plain JSON array of ``host:port`` strings. Probing them is
+    the operator's job (see the README) because a live probe is slow and rude;
+    this only reads whatever was last verified.
+    """
+    now = time.time()
+    if (not force and _free_proxies["list"]
+            and now - _free_proxies["at"] < FREE_PROXY_MAX_AGE):
+        return _free_proxies["list"]
+    try:
+        with open(_FREE_PROXY_FILE, "r") as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            clean = [str(x).strip() for x in data
+                     if isinstance(x, str) and re.match(
+                         r"^\d{1,3}(\.\d{1,3}){3}:\d{2,5}$", x.strip())]
+            _free_proxies.update(list=clean, checked=len(clean), at=now)
+    except Exception:
+        _free_proxies.setdefault("at", now)
+    return _free_proxies["list"]
 
 # Proxy pools for /ai/ask are read from the process environment only, so
 # credentials never land in config.json or in a commit.
@@ -646,6 +682,294 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
             return max(lo, min(hi, int(v)))
         except ValueError:
             return default
+
+    # ------------------------------------------------- JKT48 (fandom wiki)
+    def _fandom_json(url, ttl=None):
+        """MediaWiki api.php returns plain JSON and is not behind the
+        Cloudflare wall that blocks the wiki's HTML pages, so the whole
+        member roster is reachable without a browser."""
+        data, _ = fetch_json(url, ttl=ttl if ttl is not None else long,
+                             rate_per_min=40)
+        if isinstance(data, dict) and data.get("error"):
+            raise UpstreamError("fandom api: %s" % data["error"].get("info"),
+                                502)
+        return data
+
+    @route("GET", r"/api/v1/jkt48/roster")
+    def jkt48_roster(h, m, query):
+        """The full member roster, names only, straight from the Fandom wiki.
+
+        jkt48.com itself answers 403 to non-browser clients, and the wiki's
+        HTML pages are blocked the same way; its api.php is not.
+        """
+        category = q(query, "category", "Members")
+        limit = nq(query, "limit", 200, 1, 500)
+        names = jkt48_mod.category_members(_fandom_json, category, limit)
+        return {"source": "jkt48.fandom.com", "category": category,
+                "count": len(names), "members": names}
+
+    @route("GET", r"/api/v1/jkt48/member")
+    def jkt48_member_full(h, m, query):
+        """One member in detail: birth name, nickname, blood type, zodiac,
+        height, generation, team, join dates and social links.
+
+        &wiki=1 adds the Indonesian Wikipedia lead paragraph for context the
+        wiki's one-line description does not carry.
+        """
+        name = q(query, "name", required=True)
+        rec = jkt48_mod.member_record(_fandom_json, name)
+        if rec is None:
+            raise UpstreamError("no JKT48 member page named %r" % name, 404)
+        rec["source"] = "jkt48.fandom.com"
+        if q(query, "wiki", "0") == "1":
+            rec["id_wikipedia"] = jkt48_mod.id_wikipedia_summary(
+                _fandom_json, name)
+        return rec
+
+    @route("GET", r"/api/v1/jkt48/member/search")
+    def jkt48_member_search(h, m, query):
+        """Search the roster by name, nickname, generation or team."""
+        term = q(query, "q", required=True)
+        limit = nq(query, "limit", 20, 1, 100)
+        names = jkt48_mod.roster(_fandom_json)
+        recs = jkt48_mod.member_batch(_fandom_json, names)
+        needle = term.lower()
+        hits = [r for r in recs.values()
+                if needle in json.dumps(r, ensure_ascii=False).lower()]
+        return {"source": "jkt48.fandom.com", "query": term,
+                "scanned": len(recs), "count": len(hits[:limit]),
+                "members": hits[:limit]}
+
+    # ------------------------------------------------------------ playable
+    def _session(sid, game=None):
+        st = _SESSIONS.get(sid)
+        if st is None:
+            raise UpstreamError("no such game session (it expires after %dh, "
+                                "or the server restarted)" % (
+                                    play_mod.GAME_TTL // 3600), 404)
+        if game and st.get("game") != game:
+            raise UpstreamError("session %s is a %s game, not %s"
+                                % (sid, st.get("game"), game), 400)
+        return st
+
+    @route("GET", r"/api/v1/play/list")
+    def play_list(h, m, query):
+        """What can be played, and the session ids currently alive."""
+        return {
+            "games": ["tictactoe", "wordguess", "riddle", "gacha", "dice",
+                      "puzzle", "minesweeper"],
+            "active_sessions": _SESSIONS.count(),
+            "note": "start a game, keep its id, then send moves to the "
+                    "matching /play/<game>/<action> route",
+        }
+
+    @route("GET", r"/api/v1/play/tictactoe")
+    def play_ttt_new(h, m, query):
+        """Start a tic-tac-toe game. &size=3..15, &first=X|O."""
+        size = nq(query, "size", 3, 3, play_mod.MAX_TTT_SIZE)
+        first = (q(query, "first", "X") or "X").upper()[:1]
+        if first not in ("X", "O"):
+            raise UpstreamError("first must be X or O", 400)
+        st = play_mod.new_tictactoe(size, first)
+        sid = _SESSIONS.put(play_mod.new_id("ttt"), st)
+        return {"session": sid, "size": size, "first": first,
+                "your_mark": first, "board": play_mod.ttt_board_text(
+                    st["board"], size), "cells": size * size,
+                "next": "/api/v1/play/tictactoe/move?session=%s&cell=1"
+                         % sid}
+
+    @route("GET", r"/api/v1/play/tictactoe/move")
+    def play_ttt_move(h, m, query):
+        """Place a mark. &session= &cell=1..N (1-based)."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "tictactoe")
+        raw = q(query, "cell", required=True)
+        try:
+            cell = int(raw)
+        except ValueError:
+            raise UpstreamError("cell must be a number, got %r" % raw, 400)
+        if not (1 <= cell <= st["size"] ** 2):
+            # Reject out of range as a client error rather than burying it in
+            # the message field: a bot should not have to parse prose to tell
+            # a bad input from a normal move.
+            raise UpstreamError("cell must be between 1 and %d for a %dx%d board"
+                                % (st["size"] ** 2, st["size"], st["size"]),
+                                400)
+        st, msg = play_mod.ttt_play(st, cell)
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg, "board": play_mod.ttt_board_text(
+            st["board"], st["size"]), "turn": st["turn"], "winner": st["winner"],
+            "over": st["over"], "moves": st["moves"]}
+
+    @route("GET", r"/api/v1/play/word/start")
+    def play_word_new(h, m, query):
+        """Start a word-guessing game. &length=3..12, &lang=en|id."""
+        length = q(query, "length")
+        st = play_mod.new_wordgame(length, q(query, "lang", "en"))
+        sid = _SESSIONS.put(play_mod.new_id("word"), st)
+        view = play_mod.wordgame_state(st)
+        return {"session": sid, "length": len(st["word"]), "lang": st["lang"],
+                **view, "next": "/api/v1/play/word/guess?session=%s&letter=a"
+                               % sid}
+
+    @route("GET", r"/api/v1/play/word/guess")
+    def play_word_guess(h, m, query):
+        """Guess one letter. &session= &letter=A-Z."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "wordguess")
+        st, msg = play_mod.wordgame_guess(st, q(query, "letter", required=True))
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg,
+                **play_mod.wordgame_state(st, reveal=st["status"] == "lost")}
+
+    @route("GET", r"/api/v1/play/word/solve")
+    def play_word_solve(h, m, query):
+        """Give up and reveal the word."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "wordguess")
+        st, msg = play_mod.wordgame_solve(st)
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg,
+                **play_mod.wordgame_state(st, reveal=True)}
+
+    @route("GET", r"/api/v1/play/riddle/start")
+    def play_riddle_new(h, m, query):
+        """Start an asah-otak riddle. &lang=en|id."""
+        lang = q(query, "lang", "en")
+        st = play_mod.new_riddle(lang)
+        sid = _SESSIONS.put(play_mod.new_id("riddle"), st)
+        return {"session": sid, "lang": st["lang"], "riddle": st["riddle"],
+                "hints_available": len(st["hints"]) + 1,
+                "next": "/api/v1/play/riddle/hint?session=%s" % sid}
+
+    @route("GET", r"/api/v1/play/riddle/hint")
+    def play_riddle_hint(h, m, query):
+        """Take the next hint (there are three, each more direct)."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "riddle")
+        st, msg = play_mod.riddle_hint(st)
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg, "hints_used": st["hints_used"]}
+
+    @route("GET", r"/api/v1/play/riddle/answer")
+    def play_riddle_answer(h, m, query):
+        """Submit an answer. &session= &answer=towel"""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "riddle")
+        st, msg = play_mod.riddle_answer(st, q(query, "answer", required=True))
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg, "solved": st["solved"]}
+
+    @route("GET", r"/api/v1/play/gacha/pull")
+    def play_gacha(h, m, query):
+        """Draw from the gacha. &count=1..20. A pity rule forces an SSR after
+        40 pulls with none, so the bot can promise a guarantee honestly."""
+        sid = q(query, "session")
+        st = _SESSIONS.get(sid) if sid else None
+        fresh = st is None or st.get("game") != "gacha"
+        if fresh:
+            sid = play_mod.new_id("gacha")
+            st = play_mod.new_gacha()
+        st, got = play_mod.gacha_pull(st, q(query, "count", 1))
+        _SESSIONS.put(sid, st)
+        best = max(got, key=lambda x: ("N", "R", "SR", "SSR").index(x["rarity"]))
+        return {"session": sid, "new_player": fresh, "count": len(got),
+                "pulls": got, "best": best, "pulls_since_ssr": st["since_ssr"],
+                "total_pulls": st["pulls"],
+                "pity_at": play_mod.PITY_THRESHOLD}
+
+    @route("GET", r"/api/v1/play/dice")
+    def play_dice(h, m, query):
+        """Roll dice. ?dice=2d6+3 (also d20, 4D8-2). No session needed."""
+        notation = q(query, "dice", required=True)
+        total, rolls, mods, ok = play_mod.roll_dice(notation)
+        if not ok:
+            raise UpstreamError("cannot parse dice notation %r; try 2d6+3, "
+                                "d20, 4D8-2" % notation, 400)
+        return {"notation": notation, "total": total, "rolls": rolls,
+                "modifiers": mods}
+
+    @route("GET", r"/api/v1/play/puzzle")
+    def play_puzzle_new(h, m, query):
+        """Start a sliding puzzle. &size=2..6. Every board is solvable."""
+        size = nq(query, "size", 4, 2, 6)
+        st = play_mod.new_puzzle(size)
+        sid = _SESSIONS.put(play_mod.new_id("puzz"), st)
+        return {"session": sid, "size": size, "board": st["board"],
+                "display": play_mod.puzzle_text(st["board"], size),
+                "solvable": play_mod.is_solvable(st["board"]),
+                "next": "/api/v1/play/puzzle/move?session=%s&tile=1" % sid}
+
+    @route("GET", r"/api/v1/play/puzzle/move")
+    def play_puzzle_move(h, m, query):
+        """Slide a tile into the blank. &session= &tile=0..N-1 (0-based)."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "puzzle")
+        raw = q(query, "tile", required=True)
+        try:
+            idx = int(raw)
+        except ValueError:
+            raise UpstreamError("tile must be a number, got %r" % raw, 400)
+        if not (0 <= idx < st["size"] ** 2):
+            raise UpstreamError("tile must be between 0 and %d for a %dx%d board"
+                                % (st["size"] ** 2 - 1, st["size"],
+                                   st["size"]), 400)
+        st, msg = play_mod.puzzle_moves(st, idx)
+        _SESSIONS.put(sid, st)
+        return {"session": sid, "message": msg, "board": st["board"],
+                "display": play_mod.puzzle_text(st["board"], st["size"]),
+                "moves": st["moves"],
+                "solved": st["board"] == list(range(1, st["size"] ** 2)) + [0]}
+
+    @route("GET", r"/api/v1/play/puzzle/hint")
+    def play_puzzle_hint(h, m, query):
+        """Which tile can move toward its place right now."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "puzzle")
+        return {"session": sid, "hint": play_mod.puzzle_hint(st)}
+
+    @route("GET", r"/api/v1/play/mines")
+    def play_mines_new(h, m, query):
+        """Start minesweeper. &size=5..30, &mines=. The first click is
+        always safe - mines are placed around it, not on it."""
+        size = nq(query, "size", 9, 5, 30)
+        mines = nq(query, "mines", max(10, size * size // 8), 1,
+                   size * size - 9)
+        st = play_mod.new_mines(mines, size)
+        sid = _SESSIONS.put(play_mod.new_id("mine"), st)
+        return {"session": sid, "size": size, "mines": st["mines"],
+                "display": play_mod.mines_text(st),
+                "next": "/api/v1/play/mines/reveal?session=%s&cell=0" % sid}
+
+    @route("GET", r"/api/v1/play/mines/reveal")
+    def play_mines_reveal(h, m, query):
+        """Open a cell. &session= &cell=0..N-1."""
+        sid = q(query, "session", required=True)
+        st = _session(sid, "minesweeper")
+        raw = q(query, "cell", required=True)
+        try:
+            idx = int(raw)
+        except ValueError:
+            raise UpstreamError("cell must be a number, got %r" % raw, 400)
+        if not (0 <= idx < st["size"] ** 2):
+            raise UpstreamError("cell must be between 0 and %d for a %dx%d board"
+                                % (st["size"] ** 2 - 1, st["size"],
+                                   st["size"]), 400)
+        st, msg = play_mod.mines_reveal(st, idx)
+        _SESSIONS.put(sid, st)
+        opened = len(st["opened"])
+        return {"session": sid, "message": msg, "display": play_mod.mines_text(st),
+                "opened": opened, "dead": st["dead"],
+                "cleared": opened >= st["size"] ** 2 - st["mines"],
+                "mines": st["mines"]}
+
+    @route("GET", r"/api/v1/play/drop")
+    def play_drop(h, m, query):
+        """Forget a game session."""
+        sid = q(query, "session", required=True)
+        _SESSIONS.drop(sid)
+        return {"session": sid, "dropped": True, "active_sessions":
+                _SESSIONS.count()}
 
     # ---------------------------------------------------------------- MPL
     @route("GET", r"/api/v1/mpl/schedule")
@@ -1588,14 +1912,22 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
         poll_timeout = int(_ENV.get("POLLINATIONS_TIMEOUT", "45"))
         poll_deadline = time.time() + wait_for
         polls = 0
+        # Open proxies matter for this upstream specifically: the anonymous
+        # window is per exit IP, so a different IP is a different window. They
+        # are only consulted once the direct window is closed, because a
+        # public proxy sees the request.
+        free_pools = _load_free_proxies() if use_proxy else []
         while True:
             try:
                 text, used_model, secs = pollinations_mod.ask(
-                    prompt, timeout=poll_timeout)
+                    prompt, timeout=poll_timeout,
+                    proxies=free_pools if polls else [])
                 res = {"answer": text, "via": "pollinations", "attempts": 1,
                        "waited_polls": polls,
                        "elapsed": round(time.time() - started, 2),
                        "route_seconds": secs, "upstream_model": used_model}
+                if polls and free_pools:
+                    res["via_open_proxy"] = True
                 res.update({"model": model, "cached": False,
                             "source": "text.pollinations.ai"})
                 CACHE.set(key, json.dumps(res), ttl=86400)
@@ -1612,14 +1944,17 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
                     raise UpstreamError(str(exc), exc.status)
                 break
 
-        # Upstream 2: chatbotchatapp.com, via the configured proxy pool.
+        # Upstream 2: chatbotchatapp.com. Paid proxy pools first, then any
+        # open proxies the operator has verified - free ones can read the
+        # traffic, so they are strictly the last resort and capped.
+        paid_pools = aiask_mod.parse_pools(
+            _ENV.get("ASK_PROXIES"), _ENV.get("ASK_PROXY_PASSWORD")
+        ) if use_proxy else []
+        free_pools = _load_free_proxies() if use_proxy else []
         try:
             res = aiask_mod.ask(prompt, model=model, proxy_tries=retries + 1,
-                                direct=use_proxy,
-                                pools=aiask_mod.parse_pools(
-                                    _ENV.get("ASK_PROXIES"),
-                                    _ENV.get("ASK_PROXY_PASSWORD"))
-                                if use_proxy else [])
+                                direct=use_proxy, pools=paid_pools,
+                                free_pools=free_pools)
         except aiask_mod.QuotaExhausted:
             # Say plainly that BOTH upstreams ran out, otherwise the error reads
             # as if only one of them was tried.
@@ -1627,8 +1962,10 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
                 "both keyless upstreams are out of anonymous quota for this "
                 "IP right now (text.pollinations.ai: 402, "
                 "chatbotchatapp.com: daily cap). No proxy pool is configured "
-                "(ASK_PROXIES), so there is no third route to try. Retry in a "
-                "few minutes.", 429)
+                "(ASK_PROXIES) and no verified open proxy is available "
+                "(free_proxies.json), so there is no third route to try. Retry "
+                "in a few minutes, or pass &wait=<seconds> to block until the "
+                "anonymous window reopens.", 429)
         except aiask_mod.AskError as exc:
             raise UpstreamError(str(exc), exc.status if exc.status >= 400 else 502)
         res.update({"model": model, "cached": False,

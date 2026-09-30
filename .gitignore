@@ -9,3 +9,8 @@ vercel_build/
 .env.*
 !.env.example
 !config.example.json
+
+# Written by refresh_free_proxies.py. It is a list of public host:port pairs,
+# not a secret, but it churns on every run - a placeholder keeps the shape
+# documented without tracking whatever the last scan happened to find.
+free_proxies.json

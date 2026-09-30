@@ -129,9 +129,23 @@ class _AuthProxyHandler(urllib.request.ProxyHandler):
 
 
 def _opener(auth, timeout):
-    """auth is (hostport, "user:pass", basic_b64) or None for direct."""
+    """Build an opener for one route.
+
+    ``auth`` is one of:
+      None                              - direct, no proxy
+      (hostport, "user:pass", basic64)  - a proxy that needs credentials
+      "host:port"                      - an open proxy, no credentials
+    """
     cj = http.cookiejar.CookieJar()
-    if auth:
+    if isinstance(auth, str):
+        # Open proxy: no userinfo, so the stdlib ProxyHandler is enough and
+        # there is no CONNECT tunnel to authorise.
+        url = "http://" + auth
+        op = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(cj),
+            urllib.request.ProxyHandler({"http": url, "https": url}))
+        op.addheaders = [("User-Agent", UA), ("Accept", "*/*")]
+    elif auth:
         hostport, creds, basic_b64 = auth
         # urllib's _parse_proxy splits userinfo on the FIRST ":" only, so the
         # user and the password must each be percent-encoded separately - a
@@ -167,8 +181,8 @@ def _ask_once(msg, model, auth, timeout):
              "X-Requested-With": "XMLHttpRequest", "X-CSRF-TOKEN": csrf,
              "X-XSRF-TOKEN": xsrf, "Content-Type": "application/json",
              "Accept": "*/*"}
-        if auth:
-            h["Proxy-Authorization"] = "Basic " + auth[1]
+        if auth and not isinstance(auth, str):
+            h["Proxy-Authorization"] = "Basic " + auth[2]
         if hdrs:
             h.update(hdrs)
         body = json.dumps(data).encode() if data is not None else None
@@ -213,11 +227,16 @@ def _ask_once(msg, model, auth, timeout):
 
 
 def ask(prompt, model="gpt-5", proxy_tries=1, direct=True,
-        proxy_timeout=None, direct_timeout=30, pools=None):
+        proxy_timeout=None, direct_timeout=30, pools=None, free_pools=None):
     """Ask the model, preferring a direct connection and falling back to pools.
 
     Returns ``{"answer", "via", "country", "attempts", "elapsed"}``. Raises
     AskError - QuotaExhausted only if every route hit the daily cap.
+
+    ``free_pools`` is a list of bare ``host:port`` strings: open proxies that
+    need no credentials. They are tried last, because a public proxy can see
+    the request and is unreliable by nature, but they cost nothing and
+    occasionally work when nothing else does.
     """
     if not prompt or not str(prompt).strip():
         raise AskError("prompt is empty", code="bad_request", status=400)
@@ -232,6 +251,8 @@ def ask(prompt, model="gpt-5", proxy_tries=1, direct=True,
     if pools is None:
         pools = parse_pools(os.environ.get("ASK_PROXIES"),
                             os.environ.get("ASK_PROXY_PASSWORD"))
+    if free_pools is None:
+        free_pools = []
     if proxy_timeout is None:
         try:
             proxy_timeout = int(os.environ.get("ASK_PROXY_TIMEOUT", "60"))
@@ -246,7 +267,10 @@ def ask(prompt, model="gpt-5", proxy_tries=1, direct=True,
         # and injects Proxy-Authorization on the CONNECT - see _AuthProxyHandler.
         routes.append(((hostport, creds_label, auth_b64),
                        "proxy:%s" % creds_label.split(":")[0]))
-    routes = routes[:1] if not direct and not pools else routes
+    for hostport in free_pools[:8]:
+        # no credentials: hand the opener a plain "http://host:port" proxy
+        routes.append((hostport, "free:%s" % hostport))
+    routes = routes[:1] if not direct and not pools and not free_pools else routes
 
     started = time.time()
     attempts, last = 0, None
