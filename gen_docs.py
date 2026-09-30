@@ -78,8 +78,6 @@ def example(path, query):
         path, ("?" + qs[1:]) if qs else "")
 
 
-# Raw, because the embedded CSS and JavaScript are full of backslashes that a
-# regular string would try to interpret.
 TEMPLATE = r"""<!doctype html>
 <html lang="en">
 <head>
@@ -88,163 +86,281 @@ TEMPLATE = r"""<!doctype html>
 <title>%(title)s</title>
 <style>
   :root {
-    --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
-    --dim:#8b949e; --accent:#58a6ff; --open:#3fb950; --auth:#d29922;
+    --bg:#0a0e14; --panel:#11161d; --panel2:#161d26; --line:#232c38;
+    --text:#e8eef6; --dim:#8b98a8; --faint:#5c6b7a;
+    --accent:#5aa2ff; --accent2:#3d7ddb; --open:#3fb950; --auth:#e3b341;
+    --radius:10px;
   }
   * { box-sizing:border-box }
+  html { scroll-behavior:smooth }
   body { margin:0; background:var(--bg); color:var(--text);
-         font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif }
-  header { padding:40px 24px 20px; max-width:1080px; margin:0 auto;
-           border-bottom:1px solid var(--line) }
-  h1 { margin:0 0 6px; font-size:28px; letter-spacing:-.4px }
-  .sub { color:var(--dim); font-size:14px }
-  .counts { margin-top:16px; display:flex; gap:10px; flex-wrap:wrap }
-  .pill { background:var(--panel); border:1px solid var(--line);
-          border-radius:20px; padding:5px 13px; font-size:13px }
-  .pill b { color:var(--accent) }
-  main { max-width:1080px; margin:0 auto; padding:0 24px 80px }
-  .search { position:sticky; top:0; z-index:9; background:var(--bg);
-            padding:18px 0 14px; border-bottom:1px solid var(--line);
-            margin-bottom:8px }
-  input { width:100%%; padding:12px 14px; font-size:15px;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased }
+  a { color:var(--accent); text-decoration:none }
+  a:hover { text-decoration:underline }
+
+  /* ---- layout: fixed sidebar + scrolling content ---- */
+  .wrap { display:grid; grid-template-columns:264px minmax(0,1fr);
+          max-width:1400px; margin:0 auto; gap:0 }
+  aside { position:sticky; top:0; align-self:start;
+          max-height:100vh; overflow-y:auto; overscroll-behavior:contain;
+          padding:26px 20px 40px; border-right:1px solid var(--line) }
+  /* the group list is the only part allowed to scroll away; the identity
+     fields at the top stay put, so scroll hides nav links, never the input */
+  aside > .stats, aside > .field { position:sticky; top:0;
+          background:var(--bg); z-index:1 }
+  .brand { font-size:19px; font-weight:650; letter-spacing:-.3px;
+           margin:0 0 2px; display:flex; align-items:center; gap:8px }
+  .brand .dot { width:8px; height:8px; border-radius:50%%;
+                background:var(--open); box-shadow:0 0 8px var(--open) }
+  .tagline { color:var(--dim); font-size:12.5px; margin:0 0 18px }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px;
+           margin-bottom:20px }
+  .stat { background:var(--panel); border:1px solid var(--line);
+          border-radius:var(--radius); padding:9px 11px }
+  .stat b { display:block; font-size:19px; color:var(--accent);
+            line-height:1.2; letter-spacing:-.4px }
+  .stat span { color:var(--faint); font-size:11px; text-transform:uppercase;
+               letter-spacing:.5px }
+
+  .field { margin-bottom:10px }
+  .field label { display:block; color:var(--dim); font-size:11.5px;
+                 margin-bottom:4px; text-transform:uppercase;
+                 letter-spacing:.5px }
+  input { width:100%%; padding:9px 11px; font-size:13.5px;
           background:var(--panel); color:var(--text);
-          border:1px solid var(--line); border-radius:8px }
-  input:focus { outline:none; border-color:var(--accent) }
-  h2 { margin:34px 0 4px; font-size:19px; letter-spacing:-.2px }
-  h2 .n { color:var(--dim); font-weight:400; font-size:14px }
-  details { border:1px solid var(--line); border-radius:8px;
-            background:var(--panel); margin:8px 0 }
-  summary { cursor:pointer; padding:12px 15px; list-style:none;
-            display:flex; gap:12px; align-items:baseline; flex-wrap:wrap }
-  summary::-webkit-details-marker { display:none }
-  summary::before { content:"▸"; color:var(--dim); transition:transform .12s }
-  details[open] summary::before { transform:rotate(90deg) }
-  .verb { font:600 11px/1 ui-monospace,monospace; letter-spacing:.5px;
-          color:var(--open); border:1px solid var(--line);
-          border-radius:4px; padding:4px 6px }
-  .path { font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
-          color:var(--accent); word-break:break-all }
-  .desc { color:var(--dim); font-size:14px; flex:1; min-width:200px }
-  .tag { font-size:11px; padding:3px 7px; border-radius:10px; white-space:nowrap }
-  .tag.pub { color:var(--open); border:1px solid var(--open) }
-  .tag.key { color:var(--auth); border:1px solid var(--auth) }
-  .body { padding:0 15px 15px 40px; border-top:1px solid var(--line) }
-  table { width:100%%; border-collapse:collapse; font-size:13px; margin:10px 0 }
-  td,th { text-align:left; padding:5px 9px; border-bottom:1px solid var(--line);
-          vertical-align:top }
-  th { color:var(--dim); font-weight:500 }
-  code { font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;
-         background:#0d1117; border:1px solid var(--line);
-         border-radius:5px; padding:2px 6px }
-  pre { background:#0d1117; border:1px solid var(--line); border-radius:8px;
-        padding:13px 15px; overflow-x:auto; margin:11px 0 }
-  pre code { background:none; border:0; padding:0 }
-  button { background:var(--panel); color:var(--text); cursor:pointer;
-           border:1px solid var(--line); border-radius:6px;
-           padding:5px 11px; font-size:12.5px; margin-top:6px }
+          border:1px solid var(--line); border-radius:8px;
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace }
+  input:focus { outline:none; border-color:var(--accent);
+                box-shadow:0 0 0 3px rgba(90,162,255,.13) }
+  input::placeholder { color:var(--faint) }
+  .row { display:flex; gap:8px }
+  .row input { flex:1; min-width:0 }
+  button { background:var(--panel2); color:var(--text); cursor:pointer;
+           border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+           font-size:13px; font-family:inherit; transition:.12s }
   button:hover { border-color:var(--accent); color:var(--accent) }
-  .out { background:#0d1117; border:1px solid var(--line); border-radius:8px;
+  button.primary { background:var(--accent2); border-color:var(--accent2);
+                   color:#fff; font-weight:600 }
+  button.primary:hover { background:var(--accent); border-color:var(--accent) }
+
+  nav { margin-top:22px; border-top:1px solid var(--line); padding-top:14px }
+  nav a { display:flex; justify-content:space-between; align-items:baseline;
+          gap:8px; padding:6px 9px; border-radius:7px; color:var(--dim);
+          font-size:13.5px }
+  nav a:hover { background:var(--panel); color:var(--text);
+                text-decoration:none }
+  nav a .c { color:var(--faint); font-size:11.5px;
+             font-family:ui-monospace,monospace }
+  nav .cap { color:var(--faint); font-size:11px; text-transform:uppercase;
+             letter-spacing:.6px; margin:0 9px 5px }
+
+  main { padding:30px 34px 90px; min-width:0 }
+  .searchbar { position:sticky; top:0; z-index:9; background:var(--bg);
+               padding:0 0 16px; margin-bottom:6px;
+               display:flex; gap:10px; align-items:center }
+  .searchbar input { font-size:15px; padding:11px 14px }
+  .kbd { color:var(--faint); font-size:11px; white-space:nowrap }
+  kbd { background:var(--panel2); border:1px solid var(--line);
+        border-bottom-width:2px; border-radius:5px; padding:2px 6px;
+        font:11px ui-monospace,monospace; color:var(--dim) }
+
+  section { scroll-margin-top:64px }
+  h2 { margin:34px 0 12px; font-size:17px; letter-spacing:-.2px;
+       display:flex; align-items:baseline; gap:9px }
+  h2::before { content:""; width:3px; height:15px; background:var(--accent);
+               border-radius:2px }
+  h2 .n { color:var(--faint); font-weight:400; font-size:13px }
+
+  details { background:var(--panel); border:1px solid var(--line);
+            border-radius:var(--radius); margin-bottom:6px;
+            overflow:hidden; transition:border-color .12s }
+  details:hover { border-color:#31405180 }
+  details[open] { border-color:var(--accent2) }
+  summary { cursor:pointer; padding:11px 14px; list-style:none;
+            display:flex; gap:11px; align-items:center }
+  summary::-webkit-details-marker { display:none }
+  summary:hover { background:#ffffff06 }
+  .caret { color:var(--faint); font-size:10px; transition:transform .14s;
+           flex:0 0 auto }
+  details[open] .caret { transform:rotate(90deg) }
+  .verb { font:600 10px/1 ui-monospace,monospace; letter-spacing:.5px;
+          color:var(--open); background:#3fb95018; border:1px solid #3fb95040;
+          border-radius:4px; padding:4px 6px; flex:0 0 auto }
+  .path { font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+          color:var(--accent); word-break:break-all; flex:0 1 auto }
+  .desc { color:var(--dim); font-size:13.5px; flex:1; min-width:0;
+          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+          overflow:hidden }
+  .tag { font-size:10.5px; padding:3px 7px; border-radius:10px;
+         white-space:nowrap; flex:0 0 auto }
+  .tag.pub { color:var(--open); border:1px solid #3fb95050 }
+  .tag.key { color:var(--auth); border:1px solid #e3b34150 }
+
+  .body { padding:14px 16px 16px 42px; border-top:1px solid var(--line);
+          background:#0000001a }
+  .kv { display:grid; grid-template-columns:74px minmax(0,1fr); gap:4px 12px;
+        font-size:13px; margin:0 0 12px }
+  .kv dt { color:var(--faint); font-size:11.5px; text-transform:uppercase;
+           letter-spacing:.4px; padding-top:3px }
+  .kv dd { margin:0 }
+  code { font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;
+         background:#0a0e14; border:1px solid var(--line);
+         border-radius:5px; padding:2px 6px; color:var(--text) }
+  .qtag { display:inline-block; margin:0 4px 4px 0 }
+  pre { background:#080c11; border:1px solid var(--line); border-radius:8px;
+        padding:12px 14px; overflow-x:auto; margin:0 0 10px; position:relative }
+  pre code { background:none; border:0; padding:0; color:#c9d6e4;
+             font-size:12.5px; line-height:1.65 }
+  .copy { position:absolute; top:7px; right:7px; padding:3px 9px;
+          font-size:11px; opacity:0; transition:.12s }
+  pre:hover .copy { opacity:1 }
+  .out { background:#080c11; border:1px solid var(--line); border-radius:8px;
          padding:12px 14px; font:12.5px ui-monospace,monospace;
          white-space:pre-wrap; word-break:break-word; margin-top:10px;
-         max-height:340px; overflow:auto; display:none }
-  .none { padding:40px 0; color:var(--dim); text-align:center }
-  .connect { padding:20px 0 4px;
-             display:flex; gap:10px; flex-wrap:wrap; align-items:center }
-  .connect input { flex:1; min-width:190px }
-  .connect #save { flex:0 0 auto }
-  @media (max-width:430px) { .connect #save { flex:1 0 100%% } }
-  .connect .note { width:100%%; color:var(--dim); font-size:12.5px }
-  footer { max-width:1080px; margin:0 auto; padding:22px 24px 60px;
-           color:var(--dim); font-size:13px; border-top:1px solid var(--line) }
-  a { color:var(--accent) }
+         max-height:360px; overflow:auto; display:none;
+         color:#b9c9d8 }
+  .acts { display:flex; gap:8px; align-items:center }
+  .none { padding:60px 0; color:var(--faint); text-align:center }
+
+  footer { margin-top:44px; padding-top:20px; border-top:1px solid var(--line);
+           color:var(--faint); font-size:12.5px; display:flex;
+           flex-wrap:wrap; gap:6px 18px }
+
+  @media (max-width:900px) {
+    .wrap { grid-template-columns:1fr }
+    aside { position:static; height:auto; border-right:0;
+            border-bottom:1px solid var(--line); padding:20px 18px 16px }
+    .stats { grid-template-columns:repeat(4,1fr) }
+    nav { display:flex; flex-wrap:wrap; gap:4px }
+    nav .cap { width:100%% }
+    main { padding:20px 18px 70px }
+    .desc { white-space:normal }
+    summary { flex-wrap:wrap }
+  }
+  @media (max-width:480px) {
+    .stats { grid-template-columns:repeat(2,1fr) }
+    .row { flex-wrap:wrap }
+    .kbd { display:none }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>%(title)s</h1>
-  <div class="sub">%(description)s</div>
-  <div class="counts">
-    <span class="pill"><b>%(total)d</b> endpoints</span>
-    <span class="pill"><b>%(ngroups)d</b> groups</span>
-    <span class="pill"><b>%(npublic)d</b> routes open without a token</span>
-    <span class="pill"><b>0</b> third-party dependencies</span>
+<div class="wrap">
+<aside>
+  <h1 class="brand"><span class="dot"></span>%(title)s</h1>
+  <p class="tagline">No upstream API keys &middot; pure standard library</p>
+
+  <div class="stats">
+    <div class="stat"><b>%(total)d</b><span>endpoints</span></div>
+    <div class="stat"><b>%(ngroups)d</b><span>groups</span></div>
+    <div class="stat"><b>%(npublic)d</b><span>open</span></div>
+    <div class="stat"><b>0</b><span>deps</span></div>
   </div>
-</header>
+
+  <div class="field">
+    <label for="base">API base URL</label>
+    <input id="base" placeholder="http://host:18742" autocomplete="off"
+           spellcheck="false">
+  </div>
+  <div class="field">
+    <label for="tok">Bearer token</label>
+    <div class="row">
+      <input id="tok" type="password" placeholder="optional"
+             autocomplete="off" spellcheck="false">
+      <button id="save" type="button">Save</button>
+    </div>
+  </div>
+
+  <nav>
+    <p class="cap">Groups</p>
+    %(nav)s
+  </nav>
+</aside>
+
 <main>
-  <div class="connect">
-    <input id="base" placeholder="API base URL (e.g. http://host:18742)"
+  <div class="searchbar">
+    <input id="q" placeholder="Search endpoints, parameters, descriptions…"
            autocomplete="off" spellcheck="false">
-    <input id="tok" type="password" placeholder="Bearer token"
-           autocomplete="off" spellcheck="false">
-    <button id="save" type="button">Save</button>
-    <div class="note">Saved in this browser only. The docs page is static and
-      knows nothing about your server; "Try it" needs both values filled in
-      unless the route is marked as needing no key.</div>
-  </div>
-  <div class="search">
-    <input id="q" placeholder="Search paths, params, descriptions…"
-           autocomplete="off" spellcheck="false">
+    <span class="kbd"><kbd>/</kbd> focus</span>
   </div>
   <div id="list">%(body)s</div>
-  <div class="none" id="empty" style="display:none">Nothing matches that.</div>
+  <div class="none" id="empty" style="display:none">No endpoint matches that.</div>
 </main>
+</div>
+
 <footer>
-  <div>Generated from the live OpenAPI document, so it cannot drift from the
-       code. Pure standard library: no framework, no CDN, no build step.</div>
-  <div style="margin-top:9px">Machine-readable: <a href="/api/v1/catalog">/api/v1/catalog</a>
-       · <a href="/api/v1/openapi.json">/api/v1/openapi.json</a></div>
+  <span>Generated from the live OpenAPI document, so it cannot drift from the code.</span>
+  <span>Machine-readable: <a href="/api/v1/catalog">/api/v1/catalog</a> &middot;
+        <a href="/api/v1/openapi.json">openapi.json</a></span>
 </footer>
+
 <script>
-// "Try it" cannot assume it is served by the API: this page is static and may
-// live on GitHub Pages while the API runs elsewhere. So the operator supplies
-// the base URL once, and both values stay in this browser.
-const baseBox = document.getElementById('base');
-const tokBox = document.getElementById('tok');
+// This page is static and may be published somewhere the API is not
+// (GitHub Pages vs a self-hosted ApiBot are different origins), so the
+// operator supplies the base URL once and it stays in this browser only.
 const store = {
   get: (k) => localStorage.getItem('apibot_' + k) || '',
   set: (k, v) => localStorage.setItem('apibot_' + k, v),
 };
+const baseBox = document.getElementById('base');
+const tokBox = document.getElementById('tok');
 baseBox.value = store.get('base');
 tokBox.value = store.get('token');
 document.getElementById('save').addEventListener('click', () => {
   store.set('base', baseBox.value.trim().replace(/\/+$/, ''));
   store.set('token', tokBox.value.trim());
   tokBox.value = store.get('token');
+  flash(document.getElementById('save'), 'Saved');
 });
+
+function flash(btn, msg) {
+  const was = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = was; }, 1100);
+}
 
 const box = document.getElementById('q');
 const items = [...document.querySelectorAll('#list details')];
-const groups = [...document.querySelectorAll('#list h2')];
+const heads = [...document.querySelectorAll('#list section')];
 const empty = document.getElementById('empty');
 
 function run() {
   const v = box.value.trim().toLowerCase();
   let shown = 0;
-  for (const g of groups) g.style.display = 'none';
-  for (const d of items) {
-    // textContent covers the summary, the parameters and the curl example,
-    // so searching "dice=2d6" or "pity" finds the route that mentions it
-    const hit = !v || d.textContent.toLowerCase().includes(v);
-    d.style.display = hit ? '' : 'none';
-    if (hit) shown++;
-    if (v && hit) d.open = true;
-  }
-  // a heading is only useful if the group under it has a visible member
-  for (const g of groups) {
-    let n = g.nextElementSibling, any = false;
-    while (n && n.tagName !== 'H2') {
-      if (n.style.display !== 'none') { any = true; break; }
-      n = n.nextElementSibling;
+  for (const sec of heads) {
+    let any = false;
+    for (const d of sec.querySelectorAll('details')) {
+      // textContent covers the summary, the parameters and the curl example,
+      // so "2d6" finds the dice route through its parameter, not just its name
+      const hit = !v || d.textContent.toLowerCase().includes(v);
+      d.style.display = hit ? '' : 'none';
+      if (hit) { any = true; shown++; }
+      if (v && hit) d.open = true;
     }
-    g.style.display = any ? '' : 'none';
+    sec.style.display = any ? '' : 'none';
   }
-  empty.style.display = shown ? 'none' : '';
+  empty.style.display = shown ? '' : 'none';
   document.getElementById('list').style.display = shown ? '' : 'none';
 }
 box.addEventListener('input', run);
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== box) {
+    e.preventDefault(); box.focus(); box.select();
+  } else if (e.key === 'Escape' && document.activeElement === box) {
+    box.value = ''; box.blur(); run();
+  }
+});
 run();
 
 document.addEventListener('click', async (e) => {
+  const cp = e.target.closest('[data-copy]');
+  if (cp) {
+    const text = cp.closest('pre').querySelector('code').textContent;
+    try { await navigator.clipboard.writeText(text); flash(cp, 'Copied'); }
+    catch { flash(cp, 'Ctrl+C'); }
+    return;
+  }
   const btn = e.target.closest('[data-try]');
   if (!btn) return;
   const out = btn.parentElement.querySelector('.out');
@@ -252,19 +368,13 @@ document.addEventListener('click', async (e) => {
   btn.textContent = 'requesting…';
   out.style.display = 'block';
   out.textContent = '';
-  if (!base) {
-    out.textContent = 'Set the API base URL above first.';
-    btn.textContent = 'Try it';
-    return;
-  }
+  if (!base) { out.textContent = 'Set the API base URL in the sidebar first.'; btn.textContent = 'Try it'; return; }
   const headers = {};
   const token = store.get('token');
   if (token) headers['Authorization'] = 'Bearer ' + token;
   try {
     const res = await fetch(base + btn.dataset.try, {headers});
-    const body = await res.text();
-    out.textContent = res.status + ' ' + res.statusText + '\n\n' +
-                      body.slice(0, 4000);
+    out.textContent = res.status + ' ' + res.statusText + '\n\n' + (await res.text()).slice(0, 4000);
   } catch (err) {
     out.textContent = 'failed: ' + err;
   }
@@ -276,6 +386,10 @@ document.addEventListener('click', async (e) => {
 """
 
 
+def slug(label):
+    return "g-" + "".join(c if c.isalnum() else "-" for c in label.lower()).strip("-")
+
+
 def main():
     with urllib.request.urlopen(SPEC_URL, timeout=20) as fh:
         spec = json.loads(fh.read().decode())
@@ -284,40 +398,53 @@ def main():
     groups = {}
     for row in rows:
         groups.setdefault(group_of(row["path"]), []).append(row)
+    # Biggest groups first: on a docs page the things people came for are the
+    # playable games and the AI routes, not the alphabetically-early strays.
+    order = sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))
 
-    out = []
-    for label, entries in groups.items():
+    body, nav = [], []
+    for label, entries in order:
         entries.sort(key=lambda r: r["path"])
-        out.append("<h2>%s <span class=\"n\">%d</span></h2>" % (esc(label), len(entries)))
+        anchor = slug(label)
+        nav.append('<a href="#%s">%s<span class="c">%d</span></a>'
+                   % (anchor, esc(label), len(entries)))
+        body.append('<section id="%s">' % anchor)
+        body.append("<h2>%s<span class=\"n\">%d</span></h2>" % (esc(label), len(entries)))
         for row in entries:
             params = ""
             if row["query"]:
-                params = ("<table><tr><th>query</th><th>" +
-                          ", ".join("<code>%s</code>" % esc(q) for q in row["query"]) +
-                          "</td></tr></table>")
+                chips = "".join('<code class="qtag">%s</code>' % esc(q)
+                                for q in row["query"])
+                params = '<dl class="kv"><dt>query</dt><dd>%s</dd></dl>' % chips
             tag = ('<span class="tag pub">no key</span>' if row["public"]
-                   else '<span class="tag key">bearer token</span>')
-            out.append(
+                   else '<span class="tag key">token</span>')
+            body.append(
                 "<details><summary>"
+                '<span class="caret">\u25b8</span>'
                 '<span class="verb">GET</span>'
                 '<span class="path">%s</span>'
-                '<span class="desc">%s</span>%s'
+                '<span class="desc" title="%s">%s</span>%s'
                 "</summary><div class=\"body\">%s"
-                "<pre><code>%s</code></pre>"
-                '<button data-try="%s">Try it</button>'
+                "<pre><button class=\"copy\" data-copy>Copy</button>"
+                "<code>%s</code></pre>"
+                '<div class="acts">'
+                '<button class="primary" data-try="%s">Try it</button>'
+                "</div>"
                 '<div class="out"></div>'
                 "</div></details>"
-                % (esc(row["path"]), esc(row["summary"]), tag, params,
+                % (esc(row["path"]), esc(row["summary"]),
+                   esc(row["summary"]), tag, params,
                    esc(example(row["path"], row["query"])),
                    esc(row["path"])))
+        body.append("</section>")
 
     html = TEMPLATE % {
         "title": spec["info"]["title"],
-        "description": spec["info"]["description"],
         "total": len(rows),
         "ngroups": len(groups),
         "npublic": sum(1 for r in rows if r["public"]),
-        "body": "\n".join(out),
+        "nav": "\n    ".join(nav),
+        "body": "\n".join(body),
     }
     with open(OUT, "w", encoding="utf-8") as fh:
         fh.write(html)

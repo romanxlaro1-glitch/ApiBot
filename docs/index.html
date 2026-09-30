@@ -6,334 +6,487 @@
 <title>ApiBot</title>
 <style>
   :root {
-    --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
-    --dim:#8b949e; --accent:#58a6ff; --open:#3fb950; --auth:#d29922;
+    --bg:#0a0e14; --panel:#11161d; --panel2:#161d26; --line:#232c38;
+    --text:#e8eef6; --dim:#8b98a8; --faint:#5c6b7a;
+    --accent:#5aa2ff; --accent2:#3d7ddb; --open:#3fb950; --auth:#e3b341;
+    --radius:10px;
   }
   * { box-sizing:border-box }
+  html { scroll-behavior:smooth }
   body { margin:0; background:var(--bg); color:var(--text);
-         font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif }
-  header { padding:40px 24px 20px; max-width:1080px; margin:0 auto;
-           border-bottom:1px solid var(--line) }
-  h1 { margin:0 0 6px; font-size:28px; letter-spacing:-.4px }
-  .sub { color:var(--dim); font-size:14px }
-  .counts { margin-top:16px; display:flex; gap:10px; flex-wrap:wrap }
-  .pill { background:var(--panel); border:1px solid var(--line);
-          border-radius:20px; padding:5px 13px; font-size:13px }
-  .pill b { color:var(--accent) }
-  main { max-width:1080px; margin:0 auto; padding:0 24px 80px }
-  .search { position:sticky; top:0; z-index:9; background:var(--bg);
-            padding:18px 0 14px; border-bottom:1px solid var(--line);
-            margin-bottom:8px }
-  input { width:100%; padding:12px 14px; font-size:15px;
+    font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    -webkit-font-smoothing:antialiased }
+  a { color:var(--accent); text-decoration:none }
+  a:hover { text-decoration:underline }
+
+  /* ---- layout: fixed sidebar + scrolling content ---- */
+  .wrap { display:grid; grid-template-columns:264px minmax(0,1fr);
+          max-width:1400px; margin:0 auto; gap:0 }
+  aside { position:sticky; top:0; align-self:start;
+          max-height:100vh; overflow-y:auto; overscroll-behavior:contain;
+          padding:26px 20px 40px; border-right:1px solid var(--line) }
+  /* the group list is the only part allowed to scroll away; the identity
+     fields at the top stay put, so scroll hides nav links, never the input */
+  aside > .stats, aside > .field { position:sticky; top:0;
+          background:var(--bg); z-index:1 }
+  .brand { font-size:19px; font-weight:650; letter-spacing:-.3px;
+           margin:0 0 2px; display:flex; align-items:center; gap:8px }
+  .brand .dot { width:8px; height:8px; border-radius:50%;
+                background:var(--open); box-shadow:0 0 8px var(--open) }
+  .tagline { color:var(--dim); font-size:12.5px; margin:0 0 18px }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:8px;
+           margin-bottom:20px }
+  .stat { background:var(--panel); border:1px solid var(--line);
+          border-radius:var(--radius); padding:9px 11px }
+  .stat b { display:block; font-size:19px; color:var(--accent);
+            line-height:1.2; letter-spacing:-.4px }
+  .stat span { color:var(--faint); font-size:11px; text-transform:uppercase;
+               letter-spacing:.5px }
+
+  .field { margin-bottom:10px }
+  .field label { display:block; color:var(--dim); font-size:11.5px;
+                 margin-bottom:4px; text-transform:uppercase;
+                 letter-spacing:.5px }
+  input { width:100%; padding:9px 11px; font-size:13.5px;
           background:var(--panel); color:var(--text);
-          border:1px solid var(--line); border-radius:8px }
-  input:focus { outline:none; border-color:var(--accent) }
-  h2 { margin:34px 0 4px; font-size:19px; letter-spacing:-.2px }
-  h2 .n { color:var(--dim); font-weight:400; font-size:14px }
-  details { border:1px solid var(--line); border-radius:8px;
-            background:var(--panel); margin:8px 0 }
-  summary { cursor:pointer; padding:12px 15px; list-style:none;
-            display:flex; gap:12px; align-items:baseline; flex-wrap:wrap }
-  summary::-webkit-details-marker { display:none }
-  summary::before { content:"▸"; color:var(--dim); transition:transform .12s }
-  details[open] summary::before { transform:rotate(90deg) }
-  .verb { font:600 11px/1 ui-monospace,monospace; letter-spacing:.5px;
-          color:var(--open); border:1px solid var(--line);
-          border-radius:4px; padding:4px 6px }
-  .path { font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
-          color:var(--accent); word-break:break-all }
-  .desc { color:var(--dim); font-size:14px; flex:1; min-width:200px }
-  .tag { font-size:11px; padding:3px 7px; border-radius:10px; white-space:nowrap }
-  .tag.pub { color:var(--open); border:1px solid var(--open) }
-  .tag.key { color:var(--auth); border:1px solid var(--auth) }
-  .body { padding:0 15px 15px 40px; border-top:1px solid var(--line) }
-  table { width:100%; border-collapse:collapse; font-size:13px; margin:10px 0 }
-  td,th { text-align:left; padding:5px 9px; border-bottom:1px solid var(--line);
-          vertical-align:top }
-  th { color:var(--dim); font-weight:500 }
-  code { font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;
-         background:#0d1117; border:1px solid var(--line);
-         border-radius:5px; padding:2px 6px }
-  pre { background:#0d1117; border:1px solid var(--line); border-radius:8px;
-        padding:13px 15px; overflow-x:auto; margin:11px 0 }
-  pre code { background:none; border:0; padding:0 }
-  button { background:var(--panel); color:var(--text); cursor:pointer;
-           border:1px solid var(--line); border-radius:6px;
-           padding:5px 11px; font-size:12.5px; margin-top:6px }
+          border:1px solid var(--line); border-radius:8px;
+          font-family:ui-monospace,SFMono-Regular,Menlo,monospace }
+  input:focus { outline:none; border-color:var(--accent);
+                box-shadow:0 0 0 3px rgba(90,162,255,.13) }
+  input::placeholder { color:var(--faint) }
+  .row { display:flex; gap:8px }
+  .row input { flex:1; min-width:0 }
+  button { background:var(--panel2); color:var(--text); cursor:pointer;
+           border:1px solid var(--line); border-radius:8px; padding:8px 12px;
+           font-size:13px; font-family:inherit; transition:.12s }
   button:hover { border-color:var(--accent); color:var(--accent) }
-  .out { background:#0d1117; border:1px solid var(--line); border-radius:8px;
+  button.primary { background:var(--accent2); border-color:var(--accent2);
+                   color:#fff; font-weight:600 }
+  button.primary:hover { background:var(--accent); border-color:var(--accent) }
+
+  nav { margin-top:22px; border-top:1px solid var(--line); padding-top:14px }
+  nav a { display:flex; justify-content:space-between; align-items:baseline;
+          gap:8px; padding:6px 9px; border-radius:7px; color:var(--dim);
+          font-size:13.5px }
+  nav a:hover { background:var(--panel); color:var(--text);
+                text-decoration:none }
+  nav a .c { color:var(--faint); font-size:11.5px;
+             font-family:ui-monospace,monospace }
+  nav .cap { color:var(--faint); font-size:11px; text-transform:uppercase;
+             letter-spacing:.6px; margin:0 9px 5px }
+
+  main { padding:30px 34px 90px; min-width:0 }
+  .searchbar { position:sticky; top:0; z-index:9; background:var(--bg);
+               padding:0 0 16px; margin-bottom:6px;
+               display:flex; gap:10px; align-items:center }
+  .searchbar input { font-size:15px; padding:11px 14px }
+  .kbd { color:var(--faint); font-size:11px; white-space:nowrap }
+  kbd { background:var(--panel2); border:1px solid var(--line);
+        border-bottom-width:2px; border-radius:5px; padding:2px 6px;
+        font:11px ui-monospace,monospace; color:var(--dim) }
+
+  section { scroll-margin-top:64px }
+  h2 { margin:34px 0 12px; font-size:17px; letter-spacing:-.2px;
+       display:flex; align-items:baseline; gap:9px }
+  h2::before { content:""; width:3px; height:15px; background:var(--accent);
+               border-radius:2px }
+  h2 .n { color:var(--faint); font-weight:400; font-size:13px }
+
+  details { background:var(--panel); border:1px solid var(--line);
+            border-radius:var(--radius); margin-bottom:6px;
+            overflow:hidden; transition:border-color .12s }
+  details:hover { border-color:#31405180 }
+  details[open] { border-color:var(--accent2) }
+  summary { cursor:pointer; padding:11px 14px; list-style:none;
+            display:flex; gap:11px; align-items:center }
+  summary::-webkit-details-marker { display:none }
+  summary:hover { background:#ffffff06 }
+  .caret { color:var(--faint); font-size:10px; transition:transform .14s;
+           flex:0 0 auto }
+  details[open] .caret { transform:rotate(90deg) }
+  .verb { font:600 10px/1 ui-monospace,monospace; letter-spacing:.5px;
+          color:var(--open); background:#3fb95018; border:1px solid #3fb95040;
+          border-radius:4px; padding:4px 6px; flex:0 0 auto }
+  .path { font:13px ui-monospace,SFMono-Regular,Menlo,monospace;
+          color:var(--accent); word-break:break-all; flex:0 1 auto }
+  .desc { color:var(--dim); font-size:13.5px; flex:1; min-width:0;
+          display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+          overflow:hidden }
+  .tag { font-size:10.5px; padding:3px 7px; border-radius:10px;
+         white-space:nowrap; flex:0 0 auto }
+  .tag.pub { color:var(--open); border:1px solid #3fb95050 }
+  .tag.key { color:var(--auth); border:1px solid #e3b34150 }
+
+  .body { padding:14px 16px 16px 42px; border-top:1px solid var(--line);
+          background:#0000001a }
+  .kv { display:grid; grid-template-columns:74px minmax(0,1fr); gap:4px 12px;
+        font-size:13px; margin:0 0 12px }
+  .kv dt { color:var(--faint); font-size:11.5px; text-transform:uppercase;
+           letter-spacing:.4px; padding-top:3px }
+  .kv dd { margin:0 }
+  code { font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace;
+         background:#0a0e14; border:1px solid var(--line);
+         border-radius:5px; padding:2px 6px; color:var(--text) }
+  .qtag { display:inline-block; margin:0 4px 4px 0 }
+  pre { background:#080c11; border:1px solid var(--line); border-radius:8px;
+        padding:12px 14px; overflow-x:auto; margin:0 0 10px; position:relative }
+  pre code { background:none; border:0; padding:0; color:#c9d6e4;
+             font-size:12.5px; line-height:1.65 }
+  .copy { position:absolute; top:7px; right:7px; padding:3px 9px;
+          font-size:11px; opacity:0; transition:.12s }
+  pre:hover .copy { opacity:1 }
+  .out { background:#080c11; border:1px solid var(--line); border-radius:8px;
          padding:12px 14px; font:12.5px ui-monospace,monospace;
          white-space:pre-wrap; word-break:break-word; margin-top:10px;
-         max-height:340px; overflow:auto; display:none }
-  .none { padding:40px 0; color:var(--dim); text-align:center }
-  .connect { padding:20px 0 4px;
-             display:flex; gap:10px; flex-wrap:wrap; align-items:center }
-  .connect input { flex:1; min-width:190px }
-  .connect #save { flex:0 0 auto }
-  @media (max-width:430px) { .connect #save { flex:1 0 100% } }
-  .connect .note { width:100%; color:var(--dim); font-size:12.5px }
-  footer { max-width:1080px; margin:0 auto; padding:22px 24px 60px;
-           color:var(--dim); font-size:13px; border-top:1px solid var(--line) }
-  a { color:var(--accent) }
+         max-height:360px; overflow:auto; display:none;
+         color:#b9c9d8 }
+  .acts { display:flex; gap:8px; align-items:center }
+  .none { padding:60px 0; color:var(--faint); text-align:center }
+
+  footer { margin-top:44px; padding-top:20px; border-top:1px solid var(--line);
+           color:var(--faint); font-size:12.5px; display:flex;
+           flex-wrap:wrap; gap:6px 18px }
+
+  @media (max-width:900px) {
+    .wrap { grid-template-columns:1fr }
+    aside { position:static; height:auto; border-right:0;
+            border-bottom:1px solid var(--line); padding:20px 18px 16px }
+    .stats { grid-template-columns:repeat(4,1fr) }
+    nav { display:flex; flex-wrap:wrap; gap:4px }
+    nav .cap { width:100% }
+    main { padding:20px 18px 70px }
+    .desc { white-space:normal }
+    summary { flex-wrap:wrap }
+  }
+  @media (max-width:480px) {
+    .stats { grid-template-columns:repeat(2,1fr) }
+    .row { flex-wrap:wrap }
+    .kbd { display:none }
+  }
 </style>
 </head>
 <body>
-<header>
-  <h1>ApiBot</h1>
-  <div class="sub">Scraper REST API: esports (MPL Indonesia), JKT48, anime/manga, games, news, misc. Send `Authorization: Bearer <token>` or `?key=<token>`.</div>
-  <div class="counts">
-    <span class="pill"><b>80</b> endpoints</span>
-    <span class="pill"><b>12</b> groups</span>
-    <span class="pill"><b>0</b> routes open without a token</span>
-    <span class="pill"><b>0</b> third-party dependencies</span>
+<div class="wrap">
+<aside>
+  <h1 class="brand"><span class="dot"></span>ApiBot</h1>
+  <p class="tagline">No upstream API keys &middot; pure standard library</p>
+
+  <div class="stats">
+    <div class="stat"><b>80</b><span>endpoints</span></div>
+    <div class="stat"><b>12</b><span>groups</span></div>
+    <div class="stat"><b>0</b><span>open</span></div>
+    <div class="stat"><b>0</b><span>deps</span></div>
   </div>
-</header>
+
+  <div class="field">
+    <label for="base">API base URL</label>
+    <input id="base" placeholder="http://host:18742" autocomplete="off"
+           spellcheck="false">
+  </div>
+  <div class="field">
+    <label for="tok">Bearer token</label>
+    <div class="row">
+      <input id="tok" type="password" placeholder="optional"
+             autocomplete="off" spellcheck="false">
+      <button id="save" type="button">Save</button>
+    </div>
+  </div>
+
+  <nav>
+    <p class="cap">Groups</p>
+    <a href="#g-playable-games">Playable games<span class="c">17</span></a>
+    <a href="#g-ai">AI<span class="c">16</span></a>
+    <a href="#g-game-wikis">Game wikis<span class="c">16</span></a>
+    <a href="#g-anime-and-manga">Anime and manga<span class="c">7</span></a>
+    <a href="#g-jkt48">JKT48<span class="c">6</span></a>
+    <a href="#g-mpl-indonesia">MPL Indonesia<span class="c">5</span></a>
+    <a href="#g-liquid-death">Liquid Death<span class="c">4</span></a>
+    <a href="#g-countries">Countries<span class="c">3</span></a>
+    <a href="#g-mobile-legends">Mobile Legends<span class="c">2</span></a>
+    <a href="#g-news">News<span class="c">2</span></a>
+    <a href="#g-phone-numbers">Phone numbers<span class="c">1</span></a>
+    <a href="#g-tv-and-film">TV and film<span class="c">1</span></a>
+  </nav>
+</aside>
+
 <main>
-  <div class="connect">
-    <input id="base" placeholder="API base URL (e.g. http://host:18742)"
+  <div class="searchbar">
+    <input id="q" placeholder="Search endpoints, parameters, descriptions…"
            autocomplete="off" spellcheck="false">
-    <input id="tok" type="password" placeholder="Bearer token"
-           autocomplete="off" spellcheck="false">
-    <button id="save" type="button">Save</button>
-    <div class="note">Saved in this browser only. The docs page is static and
-      knows nothing about your server; "Try it" needs both values filled in
-      unless the route is marked as needing no key.</div>
+    <span class="kbd"><kbd>/</kbd> focus</span>
   </div>
-  <div class="search">
-    <input id="q" placeholder="Search paths, params, descriptions…"
-           autocomplete="off" spellcheck="false">
-  </div>
-  <div id="list"><h2>AI <span class="n">16</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/ask</span><span class="desc">Ask a free AI model a question.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/ask'</code></pre><button data-try="/api/v1/ai/ask">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/catalogue</span><span class="desc">OpenRouter model catalogue: context size + real per-1M pricing.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/catalogue'</code></pre><button data-try="/api/v1/ai/catalogue">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/models</span><span class="desc">Trending models on Hugging Face. ?search=&amp;task=&amp;limit=</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/models'</code></pre><button data-try="/api/v1/ai/models">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/models/free</span><span class="desc">The model catalogue the keyless upstream exposes (no auth).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/models/free'</code></pre><button data-try="/api/v1/ai/models/free">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/news</span><span class="desc">AI news: Hacker News + Google News RSS. ?q=</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/news'</code></pre><button data-try="/api/v1/ai/news">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/papers</span><span class="desc">Daily papers from Hugging Face (today's arXiv AI/ML highlights).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/papers'</code></pre><button data-try="/api/v1/ai/papers">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/models</span><span class="desc">Hugging Face trending models, read from the HTML grid. ?sort=trending|downloads|likes</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>sort</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/scrape/models?sort=…'</code></pre><button data-try="/api/v1/ai/scrape/models">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/ollama</span><span class="desc">Ollama model library, read from the HTML listing. ?limit=</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/scrape/ollama'</code></pre><button data-try="/api/v1/ai/scrape/ollama">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/papers</span><span class="desc">Hugging Face Daily Papers, read from the page's data-props JSON.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/ai/scrape/papers'</code></pre><button data-try="/api/v1/ai/scrape/papers">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/chatbotchatapp/info</span><span class="desc">chatbotchatapp.com capability list and free-tier limits.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/chatbotchatapp/info'</code></pre><button data-try="/api/v1/chatbotchatapp/info">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/chatbotchatapp/models</span><span class="desc">chatbotchatapp.com model picker (name, blurb, paid-only flag).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/chatbotchatapp/models'</code></pre><button data-try="/api/v1/chatbotchatapp/models">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/fact/cat</span><span class="desc">Random cat fact.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/fact/cat'</code></pre><button data-try="/api/v1/fact/cat">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/rewind/categories</span><span class="desc">Rewind.ai tool categories with per-category counts.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/rewind/categories'</code></pre><button data-try="/api/v1/rewind/categories">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/rewind/compare</span><span class="desc">Model-vs-model spec sheet (context window, cost, free tier).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/rewind/compare'</code></pre><button data-try="/api/v1/rewind/compare">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/rewind/models</span><span class="desc">The 437 AI models Rewind.ai serves. ?provider=&amp;q=</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/rewind/models'</code></pre><button data-try="/api/v1/rewind/models">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/rewind/tools</span><span class="desc">Rewind.ai tool registry. ?category=&amp;kind=tool|model&amp;q=&amp;limit=</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/rewind/tools'</code></pre><button data-try="/api/v1/rewind/tools">Try it</button><div class="out"></div></div></details>
-<h2>Anime and manga <span class="n">7</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/anime/(?P&lt;aid&gt;\d+</span><span class="desc">Anime detail by AniList id. /api/v1/anime/21 (One Piece)</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/anime/(?P&lt;aid&gt;\d+'</code></pre><button data-try="/api/v1/anime/(?P&lt;aid&gt;\d+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/anime/search</span><span class="desc">Search anime by title (AniList GraphQL). ?q=one piece</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>q</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/anime/search?q=…'</code></pre><button data-try="/api/v1/anime/search">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/anime/trending</span><span class="desc">Currently-airing anime (AniList).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/anime/trending'</code></pre><button data-try="/api/v1/anime/trending">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/book/(?P&lt;title&gt;[\w\s\-]+</span><span class="desc">Book search via Open Library. /api/v1/book/dune</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/book/(?P&lt;title&gt;[\w\s\-]+'</code></pre><button data-try="/api/v1/book/(?P&lt;title&gt;[\w\s\-]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jikan/anime/(?P&lt;aid&gt;\d+</span><span class="desc">Full MyAnimeList record via Jikan: /api/v1/jikan/anime/16498 (One Piece). Falls back to AniList when Jikan is down.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jikan/anime/(?P&lt;aid&gt;\d+'</code></pre><button data-try="/api/v1/jikan/anime/(?P&lt;aid&gt;\d+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jikan/top</span><span class="desc">Top anime by category. ?filter=bypopularity|airing|manga - falls back to AniList when Jikan is down.</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>filter</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jikan/top?filter=…'</code></pre><button data-try="/api/v1/jikan/top">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/manga/search</span><span class="desc">Search manga by title (AniList). ?q=naruto</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>q</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/manga/search?q=…'</code></pre><button data-try="/api/v1/manga/search">Try it</button><div class="out"></div></div></details>
-<h2>Countries <span class="n">3</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}</span><span class="desc">Country info by ISO code. /api/v1/country/id</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}'</code></pre><button data-try="/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/country/detect</span><span class="desc">Which country is this number in, and what the picker should get.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/country/detect'</code></pre><button data-try="/api/v1/country/detect">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/country/list</span><span class="desc">All 206 entries: calling code, Indonesian name, flag, search code.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/country/list'</code></pre><button data-try="/api/v1/country/list">Try it</button><div class="out"></div></div></details>
-<h2>Game wikis <span class="n">16</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+</span><span class="desc">Chess.com monthly game archives for a player.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+'</code></pre><button data-try="/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/chess/leaderboard</span><span class="desc">Chess.com global leaderboard. ?cat=daily|blitz|bullet|rapid</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>cat</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/chess/leaderboard?cat=…'</code></pre><button data-try="/api/v1/game/chess/leaderboard">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/dota/heroes</span><span class="desc">All Dota 2 heroes with attributes and roles.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/dota/heroes'</code></pre><button data-try="/api/v1/game/dota/heroes">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/dota/patch</span><span class="desc">Current Dota 2 patch version list.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/dota/patch'</code></pre><button data-try="/api/v1/game/dota/patch">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/lol/champions</span><span class="desc">All League of Legends champions (latest patch, Indonesian names).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/lol/champions'</code></pre><button data-try="/api/v1/game/lol/champions">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/lol/items</span><span class="desc">League of Legends item list (latest patch, Indonesian names).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/lol/items'</code></pre><button data-try="/api/v1/game/lol/items">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+</span><span class="desc">Pokemon detail. /api/v1/game/pokemon/pikachu or numeric id.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+'</code></pre><button data-try="/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/steam/(?P&lt;appid&gt;\d+</span><span class="desc">Steam store app details. /api/v1/game/steam/570 (Dota 2)</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/steam/(?P&lt;appid&gt;\d+'</code></pre><button data-try="/api/v1/game/steam/(?P&lt;appid&gt;\d+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/valorant/agents</span><span class="desc">Valorant agent list (name, role, description).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/valorant/agents'</code></pre><button data-try="/api/v1/game/valorant/agents">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/game/valorant/maps</span><span class="desc">Valorant map list.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/game/valorant/maps'</code></pre><button data-try="/api/v1/game/valorant/maps">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/games</span><span class="desc">Every game wiki available. ?genre=text</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>genre</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/games?genre=…'</code></pre><button data-try="/api/v1/games">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+</span><span class="desc">Characters / items / bosses of one game wiki. /api/v1/games/genshin ?category=Bosses&amp;limit=20</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>category</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+?category=…'</code></pre><button data-try="/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search</span><span class="desc">Search one game wiki. /api/v1/games/genshin/search?q=raiden</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>q</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search?q=…'</code></pre><button data-try="/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/games/{slug}[^?#]+</span><span class="desc">One entry (character, boss, item) with lead image + lore.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/games/{slug}[^?#]+'</code></pre><button data-try="/api/v1/games/{slug}[^?#]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/wiki/page/(?P&lt;title&gt;.+</span><span class="desc">Indonesian Wikipedia article summary. /api/v1/wiki/page/Mobile_Legends</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/wiki/page/(?P&lt;title&gt;.+'</code></pre><button data-try="/api/v1/wiki/page/(?P&lt;title&gt;.+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/wiki/search</span><span class="desc">Indonesian Wikipedia search. ?q=JKT48</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>q</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/wiki/search?q=…'</code></pre><button data-try="/api/v1/wiki/search">Try it</button><div class="out"></div></div></details>
-<h2>JKT48 <span class="n">6</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/member</span><span class="desc">One member in detail: birth name, nickname, blood type, zodiac,</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/member'</code></pre><button data-try="/api/v1/jkt48/member">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}</span><span class="desc">JKT48 member page summary from Wikipedia (name, extract, photo).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}'</code></pre><button data-try="/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/member/search</span><span class="desc">Search the roster by name, nickname, generation or team.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/member/search'</code></pre><button data-try="/api/v1/jkt48/member/search">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/members</span><span class="desc">Search Wikipedia for JKT48 members / generation references.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/members'</code></pre><button data-try="/api/v1/jkt48/members">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/news</span><span class="desc">JKT48 news (Google News RSS aggregator, newest first).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/news'</code></pre><button data-try="/api/v1/jkt48/news">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/jkt48/roster</span><span class="desc">The full member roster, names only, straight from the Fandom wiki.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/jkt48/roster'</code></pre><button data-try="/api/v1/jkt48/roster">Try it</button><div class="out"></div></div></details>
-<h2>Liquid Death <span class="n">4</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/liquid/divisions</span><span class="desc">All Team Liquid esports divisions. /api/v1/liquid/divisions</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/liquid/divisions'</code></pre><button data-try="/api/v1/liquid/divisions">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/liquid/news</span><span class="desc">Team Liquid news (site articles + Google News RSS).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/liquid/news'</code></pre><button data-try="/api/v1/liquid/news">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/liquid/roster</span><span class="desc">Roster of one division. /api/v1/liquid/roster?division=mlbb/tlid</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>division</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/liquid/roster?division=…'</code></pre><button data-try="/api/v1/liquid/roster">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/liquid/roster/all</span><span class="desc">Every division's roster in one call (20 upstream requests).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/liquid/roster/all'</code></pre><button data-try="/api/v1/liquid/roster/all">Try it</button><div class="out"></div></div></details>
-<h2>Mobile Legends <span class="n">2</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+</span><span class="desc">One MLBB hero: roles/lanes/release from the live table plus infobox lore.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+'</code></pre><button data-try="/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mlbb/heroes</span><span class="desc">All Mobile Legends heroes: title, roles, specialties, lanes, release. ?role=Marksman|Tank|...</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>role</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mlbb/heroes?role=…'</code></pre><button data-try="/api/v1/mlbb/heroes">Try it</button><div class="out"></div></div></details>
-<h2>MPL Indonesia <span class="n">5</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mpl/match/(?P&lt;mid&gt;\d+</span><span class="desc">Match detail: series score, per-game kills, per-player KDA / gold / items / runes.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mpl/match/(?P&lt;mid&gt;\d+'</code></pre><button data-try="/api/v1/mpl/match/(?P&lt;mid&gt;\d+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mpl/schedule</span><span class="desc">Full MPL Indonesia regular-season schedule (weeks, dates, scores, replay links).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mpl/schedule'</code></pre><button data-try="/api/v1/mpl/schedule">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mpl/standings</span><span class="desc">MPL Indonesia standings table (regular season or playoffs).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mpl/standings'</code></pre><button data-try="/api/v1/mpl/standings">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+</span><span class="desc">One team: roster (nickname, role) + full match history.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+'</code></pre><button data-try="/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/mpl/teams</span><span class="desc">All MPL Indonesia teams with logo and full name.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/mpl/teams'</code></pre><button data-try="/api/v1/mpl/teams">Try it</button><div class="out"></div></div></details>
-<h2>News <span class="n">2</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+</span><span class="desc">Generic news search via Google News RSS. /api/v1/news/MPL%20Indonesia</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+'</code></pre><button data-try="/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/tech/news</span><span class="desc">Hacker News top stories (ids + top item details).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/tech/news'</code></pre><button data-try="/api/v1/tech/news">Try it</button><div class="out"></div></div></details>
-<h2>Phone numbers <span class="n">1</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/phone/validate</span><span class="desc">Validate a phone number. ?number= required, accepts +62..., 0812...</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/phone/validate'</code></pre><button data-try="/api/v1/phone/validate">Try it</button><div class="out"></div></div></details>
-<h2>Playable games <span class="n">17</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/dice</span><span class="desc">Roll dice. ?dice=2d6+3 (also d20, 4D8-2). No session needed.</span><span class="tag key">bearer token</span></summary><div class="body"><table><tr><th>query</th><th><code>dice</code></td></tr></table><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/dice?dice=…'</code></pre><button data-try="/api/v1/play/dice">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/drop</span><span class="desc">Forget a game session.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/drop'</code></pre><button data-try="/api/v1/play/drop">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/gacha/pull</span><span class="desc">Draw from the gacha. &amp;count=1..20. A pity rule forces an SSR after</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/gacha/pull'</code></pre><button data-try="/api/v1/play/gacha/pull">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/list</span><span class="desc">What can be played, and the session ids currently alive.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/list'</code></pre><button data-try="/api/v1/play/list">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/mines</span><span class="desc">Start minesweeper. &amp;size=5..30, &amp;mines=. The first click is</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/mines'</code></pre><button data-try="/api/v1/play/mines">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/mines/reveal</span><span class="desc">Open a cell. &amp;session= &amp;cell=0..N-1.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/mines/reveal'</code></pre><button data-try="/api/v1/play/mines/reveal">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/puzzle</span><span class="desc">Start a sliding puzzle. &amp;size=2..6. Every board is solvable.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/puzzle'</code></pre><button data-try="/api/v1/play/puzzle">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/puzzle/hint</span><span class="desc">Which tile can move toward its place right now.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/puzzle/hint'</code></pre><button data-try="/api/v1/play/puzzle/hint">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/puzzle/move</span><span class="desc">Slide a tile into the blank. &amp;session= &amp;tile=0..N-1 (0-based).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/puzzle/move'</code></pre><button data-try="/api/v1/play/puzzle/move">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/riddle/answer</span><span class="desc">Submit an answer. &amp;session= &amp;answer=towel</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/riddle/answer'</code></pre><button data-try="/api/v1/play/riddle/answer">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/riddle/hint</span><span class="desc">Take the next hint (there are three, each more direct).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/riddle/hint'</code></pre><button data-try="/api/v1/play/riddle/hint">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/riddle/start</span><span class="desc">Start an asah-otak riddle. &amp;lang=en|id.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/riddle/start'</code></pre><button data-try="/api/v1/play/riddle/start">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/tictactoe</span><span class="desc">Start a tic-tac-toe game. &amp;size=3..15, &amp;first=X|O.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/tictactoe'</code></pre><button data-try="/api/v1/play/tictactoe">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/tictactoe/move</span><span class="desc">Place a mark. &amp;session= &amp;cell=1..N (1-based).</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/tictactoe/move'</code></pre><button data-try="/api/v1/play/tictactoe/move">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/word/guess</span><span class="desc">Guess one letter. &amp;session= &amp;letter=A-Z.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/word/guess'</code></pre><button data-try="/api/v1/play/word/guess">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/word/solve</span><span class="desc">Give up and reveal the word.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/word/solve'</code></pre><button data-try="/api/v1/play/word/solve">Try it</button><div class="out"></div></div></details>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/play/word/start</span><span class="desc">Start a word-guessing game. &amp;length=3..12, &amp;lang=en|id.</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/play/word/start'</code></pre><button data-try="/api/v1/play/word/start">Try it</button><div class="out"></div></div></details>
-<h2>TV and film <span class="n">1</span></h2>
-<details><summary><span class="verb">GET</span><span class="path">/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+</span><span class="desc">TV show search via TVMaze. /api/v1/tv/friends</span><span class="tag key">bearer token</span></summary><div class="body"><pre><code>curl -H 'Authorization: Bearer $TOKEN' \
-     'https://your-host/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+'</code></pre><button data-try="/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+">Try it</button><div class="out"></div></div></details></div>
-  <div class="none" id="empty" style="display:none">Nothing matches that.</div>
+  <div id="list"><section id="g-playable-games">
+<h2>Playable games<span class="n">17</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/dice</span><span class="desc" title="Roll dice. ?dice=2d6+3 (also d20, 4D8-2). No session needed.">Roll dice. ?dice=2d6+3 (also d20, 4D8-2). No session needed.</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">dice</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/dice?dice=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/dice">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/drop</span><span class="desc" title="Forget a game session.">Forget a game session.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/drop'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/drop">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/gacha/pull</span><span class="desc" title="Draw from the gacha. &amp;count=1..20. A pity rule forces an SSR after">Draw from the gacha. &amp;count=1..20. A pity rule forces an SSR after</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/gacha/pull'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/gacha/pull">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/list</span><span class="desc" title="What can be played, and the session ids currently alive.">What can be played, and the session ids currently alive.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/list'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/list">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/mines</span><span class="desc" title="Start minesweeper. &amp;size=5..30, &amp;mines=. The first click is">Start minesweeper. &amp;size=5..30, &amp;mines=. The first click is</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/mines'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/mines">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/mines/reveal</span><span class="desc" title="Open a cell. &amp;session= &amp;cell=0..N-1.">Open a cell. &amp;session= &amp;cell=0..N-1.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/mines/reveal'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/mines/reveal">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/puzzle</span><span class="desc" title="Start a sliding puzzle. &amp;size=2..6. Every board is solvable.">Start a sliding puzzle. &amp;size=2..6. Every board is solvable.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/puzzle'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/puzzle">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/puzzle/hint</span><span class="desc" title="Which tile can move toward its place right now.">Which tile can move toward its place right now.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/puzzle/hint'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/puzzle/hint">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/puzzle/move</span><span class="desc" title="Slide a tile into the blank. &amp;session= &amp;tile=0..N-1 (0-based).">Slide a tile into the blank. &amp;session= &amp;tile=0..N-1 (0-based).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/puzzle/move'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/puzzle/move">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/riddle/answer</span><span class="desc" title="Submit an answer. &amp;session= &amp;answer=towel">Submit an answer. &amp;session= &amp;answer=towel</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/riddle/answer'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/riddle/answer">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/riddle/hint</span><span class="desc" title="Take the next hint (there are three, each more direct).">Take the next hint (there are three, each more direct).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/riddle/hint'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/riddle/hint">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/riddle/start</span><span class="desc" title="Start an asah-otak riddle. &amp;lang=en|id.">Start an asah-otak riddle. &amp;lang=en|id.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/riddle/start'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/riddle/start">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/tictactoe</span><span class="desc" title="Start a tic-tac-toe game. &amp;size=3..15, &amp;first=X|O.">Start a tic-tac-toe game. &amp;size=3..15, &amp;first=X|O.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/tictactoe'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/tictactoe">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/tictactoe/move</span><span class="desc" title="Place a mark. &amp;session= &amp;cell=1..N (1-based).">Place a mark. &amp;session= &amp;cell=1..N (1-based).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/tictactoe/move'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/tictactoe/move">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/word/guess</span><span class="desc" title="Guess one letter. &amp;session= &amp;letter=A-Z.">Guess one letter. &amp;session= &amp;letter=A-Z.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/word/guess'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/word/guess">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/word/solve</span><span class="desc" title="Give up and reveal the word.">Give up and reveal the word.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/word/solve'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/word/solve">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/play/word/start</span><span class="desc" title="Start a word-guessing game. &amp;length=3..12, &amp;lang=en|id.">Start a word-guessing game. &amp;length=3..12, &amp;lang=en|id.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/play/word/start'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/play/word/start">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-ai">
+<h2>AI<span class="n">16</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/ask</span><span class="desc" title="Ask a free AI model a question.">Ask a free AI model a question.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/ask'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/ask">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/catalogue</span><span class="desc" title="OpenRouter model catalogue: context size + real per-1M pricing.">OpenRouter model catalogue: context size + real per-1M pricing.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/catalogue'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/catalogue">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/models</span><span class="desc" title="Trending models on Hugging Face. ?search=&amp;task=&amp;limit=">Trending models on Hugging Face. ?search=&amp;task=&amp;limit=</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/models'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/models">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/models/free</span><span class="desc" title="The model catalogue the keyless upstream exposes (no auth).">The model catalogue the keyless upstream exposes (no auth).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/models/free'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/models/free">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/news</span><span class="desc" title="AI news: Hacker News + Google News RSS. ?q=">AI news: Hacker News + Google News RSS. ?q=</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/news'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/news">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/papers</span><span class="desc" title="Daily papers from Hugging Face (today's arXiv AI/ML highlights).">Daily papers from Hugging Face (today's arXiv AI/ML highlights).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/papers'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/papers">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/models</span><span class="desc" title="Hugging Face trending models, read from the HTML grid. ?sort=trending|downloads|likes">Hugging Face trending models, read from the HTML grid. ?sort=trending|downloads|likes</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">sort</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/scrape/models?sort=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/scrape/models">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/ollama</span><span class="desc" title="Ollama model library, read from the HTML listing. ?limit=">Ollama model library, read from the HTML listing. ?limit=</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/scrape/ollama'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/scrape/ollama">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/ai/scrape/papers</span><span class="desc" title="Hugging Face Daily Papers, read from the page's data-props JSON.">Hugging Face Daily Papers, read from the page's data-props JSON.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/ai/scrape/papers'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/ai/scrape/papers">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/chatbotchatapp/info</span><span class="desc" title="chatbotchatapp.com capability list and free-tier limits.">chatbotchatapp.com capability list and free-tier limits.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/chatbotchatapp/info'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/chatbotchatapp/info">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/chatbotchatapp/models</span><span class="desc" title="chatbotchatapp.com model picker (name, blurb, paid-only flag).">chatbotchatapp.com model picker (name, blurb, paid-only flag).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/chatbotchatapp/models'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/chatbotchatapp/models">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/fact/cat</span><span class="desc" title="Random cat fact.">Random cat fact.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/fact/cat'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/fact/cat">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/rewind/categories</span><span class="desc" title="Rewind.ai tool categories with per-category counts.">Rewind.ai tool categories with per-category counts.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/rewind/categories'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/rewind/categories">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/rewind/compare</span><span class="desc" title="Model-vs-model spec sheet (context window, cost, free tier).">Model-vs-model spec sheet (context window, cost, free tier).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/rewind/compare'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/rewind/compare">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/rewind/models</span><span class="desc" title="The 437 AI models Rewind.ai serves. ?provider=&amp;q=">The 437 AI models Rewind.ai serves. ?provider=&amp;q=</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/rewind/models'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/rewind/models">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/rewind/tools</span><span class="desc" title="Rewind.ai tool registry. ?category=&amp;kind=tool|model&amp;q=&amp;limit=">Rewind.ai tool registry. ?category=&amp;kind=tool|model&amp;q=&amp;limit=</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/rewind/tools'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/rewind/tools">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-game-wikis">
+<h2>Game wikis<span class="n">16</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+</span><span class="desc" title="Chess.com monthly game archives for a player.">Chess.com monthly game archives for a player.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/chess/archives/(?P&lt;user&gt;[\w\-]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/chess/leaderboard</span><span class="desc" title="Chess.com global leaderboard. ?cat=daily|blitz|bullet|rapid">Chess.com global leaderboard. ?cat=daily|blitz|bullet|rapid</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">cat</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/chess/leaderboard?cat=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/chess/leaderboard">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/dota/heroes</span><span class="desc" title="All Dota 2 heroes with attributes and roles.">All Dota 2 heroes with attributes and roles.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/dota/heroes'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/dota/heroes">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/dota/patch</span><span class="desc" title="Current Dota 2 patch version list.">Current Dota 2 patch version list.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/dota/patch'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/dota/patch">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/lol/champions</span><span class="desc" title="All League of Legends champions (latest patch, Indonesian names).">All League of Legends champions (latest patch, Indonesian names).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/lol/champions'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/lol/champions">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/lol/items</span><span class="desc" title="League of Legends item list (latest patch, Indonesian names).">League of Legends item list (latest patch, Indonesian names).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/lol/items'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/lol/items">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+</span><span class="desc" title="Pokemon detail. /api/v1/game/pokemon/pikachu or numeric id.">Pokemon detail. /api/v1/game/pokemon/pikachu or numeric id.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/pokemon/(?P&lt;name&gt;[a-z0-9\-]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/steam/(?P&lt;appid&gt;\d+</span><span class="desc" title="Steam store app details. /api/v1/game/steam/570 (Dota 2)">Steam store app details. /api/v1/game/steam/570 (Dota 2)</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/steam/(?P&lt;appid&gt;\d+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/steam/(?P&lt;appid&gt;\d+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/valorant/agents</span><span class="desc" title="Valorant agent list (name, role, description).">Valorant agent list (name, role, description).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/valorant/agents'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/valorant/agents">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/game/valorant/maps</span><span class="desc" title="Valorant map list.">Valorant map list.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/game/valorant/maps'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/game/valorant/maps">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/games</span><span class="desc" title="Every game wiki available. ?genre=text">Every game wiki available. ?genre=text</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">genre</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/games?genre=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/games">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+</span><span class="desc" title="Characters / items / bosses of one game wiki. /api/v1/games/genshin ?category=Bosses&amp;limit=20">Characters / items / bosses of one game wiki. /api/v1/games/genshin ?category=Bosses&amp;limit=20</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">category</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+?category=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search</span><span class="desc" title="Search one game wiki. /api/v1/games/genshin/search?q=raiden">Search one game wiki. /api/v1/games/genshin/search?q=raiden</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">q</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search?q=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/games/(?P&lt;slug&gt;[a-z0-9\-]+/search">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/games/{slug}[^?#]+</span><span class="desc" title="One entry (character, boss, item) with lead image + lore.">One entry (character, boss, item) with lead image + lore.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/games/{slug}[^?#]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/games/{slug}[^?#]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/wiki/page/(?P&lt;title&gt;.+</span><span class="desc" title="Indonesian Wikipedia article summary. /api/v1/wiki/page/Mobile_Legends">Indonesian Wikipedia article summary. /api/v1/wiki/page/Mobile_Legends</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/wiki/page/(?P&lt;title&gt;.+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/wiki/page/(?P&lt;title&gt;.+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/wiki/search</span><span class="desc" title="Indonesian Wikipedia search. ?q=JKT48">Indonesian Wikipedia search. ?q=JKT48</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">q</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/wiki/search?q=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/wiki/search">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-anime-and-manga">
+<h2>Anime and manga<span class="n">7</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/anime/(?P&lt;aid&gt;\d+</span><span class="desc" title="Anime detail by AniList id. /api/v1/anime/21 (One Piece)">Anime detail by AniList id. /api/v1/anime/21 (One Piece)</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/anime/(?P&lt;aid&gt;\d+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/anime/(?P&lt;aid&gt;\d+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/anime/search</span><span class="desc" title="Search anime by title (AniList GraphQL). ?q=one piece">Search anime by title (AniList GraphQL). ?q=one piece</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">q</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/anime/search?q=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/anime/search">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/anime/trending</span><span class="desc" title="Currently-airing anime (AniList).">Currently-airing anime (AniList).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/anime/trending'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/anime/trending">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/book/(?P&lt;title&gt;[\w\s\-]+</span><span class="desc" title="Book search via Open Library. /api/v1/book/dune">Book search via Open Library. /api/v1/book/dune</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/book/(?P&lt;title&gt;[\w\s\-]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/book/(?P&lt;title&gt;[\w\s\-]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jikan/anime/(?P&lt;aid&gt;\d+</span><span class="desc" title="Full MyAnimeList record via Jikan: /api/v1/jikan/anime/16498 (One Piece). Falls back to AniList when Jikan is down.">Full MyAnimeList record via Jikan: /api/v1/jikan/anime/16498 (One Piece). Falls back to AniList when Jikan is down.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jikan/anime/(?P&lt;aid&gt;\d+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jikan/anime/(?P&lt;aid&gt;\d+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jikan/top</span><span class="desc" title="Top anime by category. ?filter=bypopularity|airing|manga - falls back to AniList when Jikan is down.">Top anime by category. ?filter=bypopularity|airing|manga - falls back to AniList when Jikan is down.</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">filter</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jikan/top?filter=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jikan/top">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/manga/search</span><span class="desc" title="Search manga by title (AniList). ?q=naruto">Search manga by title (AniList). ?q=naruto</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">q</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/manga/search?q=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/manga/search">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-jkt48">
+<h2>JKT48<span class="n">6</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/member</span><span class="desc" title="One member in detail: birth name, nickname, blood type, zodiac,">One member in detail: birth name, nickname, blood type, zodiac,</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/member'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/member">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}</span><span class="desc" title="JKT48 member page summary from Wikipedia (name, extract, photo).">JKT48 member page summary from Wikipedia (name, extract, photo).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/member/(?P&lt;name&gt;[\w\s\-]{2,40}">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/member/search</span><span class="desc" title="Search the roster by name, nickname, generation or team.">Search the roster by name, nickname, generation or team.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/member/search'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/member/search">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/members</span><span class="desc" title="Search Wikipedia for JKT48 members / generation references.">Search Wikipedia for JKT48 members / generation references.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/members'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/members">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/news</span><span class="desc" title="JKT48 news (Google News RSS aggregator, newest first).">JKT48 news (Google News RSS aggregator, newest first).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/news'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/news">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/jkt48/roster</span><span class="desc" title="The full member roster, names only, straight from the Fandom wiki.">The full member roster, names only, straight from the Fandom wiki.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/jkt48/roster'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/jkt48/roster">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-mpl-indonesia">
+<h2>MPL Indonesia<span class="n">5</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mpl/match/(?P&lt;mid&gt;\d+</span><span class="desc" title="Match detail: series score, per-game kills, per-player KDA / gold / items / runes.">Match detail: series score, per-game kills, per-player KDA / gold / items / runes.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mpl/match/(?P&lt;mid&gt;\d+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mpl/match/(?P&lt;mid&gt;\d+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mpl/schedule</span><span class="desc" title="Full MPL Indonesia regular-season schedule (weeks, dates, scores, replay links).">Full MPL Indonesia regular-season schedule (weeks, dates, scores, replay links).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mpl/schedule'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mpl/schedule">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mpl/standings</span><span class="desc" title="MPL Indonesia standings table (regular season or playoffs).">MPL Indonesia standings table (regular season or playoffs).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mpl/standings'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mpl/standings">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+</span><span class="desc" title="One team: roster (nickname, role) + full match history.">One team: roster (nickname, role) + full match history.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mpl/team/(?P&lt;slug&gt;[a-z0-9\-]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mpl/teams</span><span class="desc" title="All MPL Indonesia teams with logo and full name.">All MPL Indonesia teams with logo and full name.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mpl/teams'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mpl/teams">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-liquid-death">
+<h2>Liquid Death<span class="n">4</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/liquid/divisions</span><span class="desc" title="All Team Liquid esports divisions. /api/v1/liquid/divisions">All Team Liquid esports divisions. /api/v1/liquid/divisions</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/liquid/divisions'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/liquid/divisions">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/liquid/news</span><span class="desc" title="Team Liquid news (site articles + Google News RSS).">Team Liquid news (site articles + Google News RSS).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/liquid/news'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/liquid/news">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/liquid/roster</span><span class="desc" title="Roster of one division. /api/v1/liquid/roster?division=mlbb/tlid">Roster of one division. /api/v1/liquid/roster?division=mlbb/tlid</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">division</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/liquid/roster?division=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/liquid/roster">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/liquid/roster/all</span><span class="desc" title="Every division's roster in one call (20 upstream requests).">Every division's roster in one call (20 upstream requests).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/liquid/roster/all'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/liquid/roster/all">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-countries">
+<h2>Countries<span class="n">3</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}</span><span class="desc" title="Country info by ISO code. /api/v1/country/id">Country info by ISO code. /api/v1/country/id</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/country/(?P&lt;code&gt;[a-zA-Z]{2}">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/country/detect</span><span class="desc" title="Which country is this number in, and what the picker should get.">Which country is this number in, and what the picker should get.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/country/detect'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/country/detect">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/country/list</span><span class="desc" title="All 206 entries: calling code, Indonesian name, flag, search code.">All 206 entries: calling code, Indonesian name, flag, search code.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/country/list'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/country/list">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-mobile-legends">
+<h2>Mobile Legends<span class="n">2</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+</span><span class="desc" title="One MLBB hero: roles/lanes/release from the live table plus infobox lore.">One MLBB hero: roles/lanes/release from the live table plus infobox lore.</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mlbb/hero/(?P&lt;name&gt;[\w\s\-']+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/mlbb/heroes</span><span class="desc" title="All Mobile Legends heroes: title, roles, specialties, lanes, release. ?role=Marksman|Tank|...">All Mobile Legends heroes: title, roles, specialties, lanes, release. ?role=Marksman|Tank|...</span><span class="tag key">token</span></summary><div class="body"><dl class="kv"><dt>query</dt><dd><code class="qtag">role</code></dd></dl><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/mlbb/heroes?role=…'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/mlbb/heroes">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-news">
+<h2>News<span class="n">2</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+</span><span class="desc" title="Generic news search via Google News RSS. /api/v1/news/MPL%20Indonesia">Generic news search via Google News RSS. /api/v1/news/MPL%20Indonesia</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/news/(?P&lt;qterm&gt;[\w%\+ ]+">Try it</button></div><div class="out"></div></div></details>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/tech/news</span><span class="desc" title="Hacker News top stories (ids + top item details).">Hacker News top stories (ids + top item details).</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/tech/news'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/tech/news">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-phone-numbers">
+<h2>Phone numbers<span class="n">1</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/phone/validate</span><span class="desc" title="Validate a phone number. ?number= required, accepts +62..., 0812...">Validate a phone number. ?number= required, accepts +62..., 0812...</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/phone/validate'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/phone/validate">Try it</button></div><div class="out"></div></div></details>
+</section>
+<section id="g-tv-and-film">
+<h2>TV and film<span class="n">1</span></h2>
+<details><summary><span class="caret">▸</span><span class="verb">GET</span><span class="path">/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+</span><span class="desc" title="TV show search via TVMaze. /api/v1/tv/friends">TV show search via TVMaze. /api/v1/tv/friends</span><span class="tag key">token</span></summary><div class="body"><pre><button class="copy" data-copy>Copy</button><code>curl -H 'Authorization: Bearer $TOKEN' \
+     'https://your-host/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+'</code></pre><div class="acts"><button class="primary" data-try="/api/v1/tv/(?P&lt;qterm&gt;[\w%\+ ]+">Try it</button></div><div class="out"></div></div></details>
+</section></div>
+  <div class="none" id="empty" style="display:none">No endpoint matches that.</div>
 </main>
+</div>
+
 <footer>
-  <div>Generated from the live OpenAPI document, so it cannot drift from the
-       code. Pure standard library: no framework, no CDN, no build step.</div>
-  <div style="margin-top:9px">Machine-readable: <a href="/api/v1/catalog">/api/v1/catalog</a>
-       · <a href="/api/v1/openapi.json">/api/v1/openapi.json</a></div>
+  <span>Generated from the live OpenAPI document, so it cannot drift from the code.</span>
+  <span>Machine-readable: <a href="/api/v1/catalog">/api/v1/catalog</a> &middot;
+        <a href="/api/v1/openapi.json">openapi.json</a></span>
 </footer>
+
 <script>
-// "Try it" cannot assume it is served by the API: this page is static and may
-// live on GitHub Pages while the API runs elsewhere. So the operator supplies
-// the base URL once, and both values stay in this browser.
-const baseBox = document.getElementById('base');
-const tokBox = document.getElementById('tok');
+// This page is static and may be published somewhere the API is not
+// (GitHub Pages vs a self-hosted ApiBot are different origins), so the
+// operator supplies the base URL once and it stays in this browser only.
 const store = {
   get: (k) => localStorage.getItem('apibot_' + k) || '',
   set: (k, v) => localStorage.setItem('apibot_' + k, v),
 };
+const baseBox = document.getElementById('base');
+const tokBox = document.getElementById('tok');
 baseBox.value = store.get('base');
 tokBox.value = store.get('token');
 document.getElementById('save').addEventListener('click', () => {
   store.set('base', baseBox.value.trim().replace(/\/+$/, ''));
   store.set('token', tokBox.value.trim());
   tokBox.value = store.get('token');
+  flash(document.getElementById('save'), 'Saved');
 });
+
+function flash(btn, msg) {
+  const was = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(() => { btn.textContent = was; }, 1100);
+}
 
 const box = document.getElementById('q');
 const items = [...document.querySelectorAll('#list details')];
-const groups = [...document.querySelectorAll('#list h2')];
+const heads = [...document.querySelectorAll('#list section')];
 const empty = document.getElementById('empty');
 
 function run() {
   const v = box.value.trim().toLowerCase();
   let shown = 0;
-  for (const g of groups) g.style.display = 'none';
-  for (const d of items) {
-    // textContent covers the summary, the parameters and the curl example,
-    // so searching "dice=2d6" or "pity" finds the route that mentions it
-    const hit = !v || d.textContent.toLowerCase().includes(v);
-    d.style.display = hit ? '' : 'none';
-    if (hit) shown++;
-    if (v && hit) d.open = true;
-  }
-  // a heading is only useful if the group under it has a visible member
-  for (const g of groups) {
-    let n = g.nextElementSibling, any = false;
-    while (n && n.tagName !== 'H2') {
-      if (n.style.display !== 'none') { any = true; break; }
-      n = n.nextElementSibling;
+  for (const sec of heads) {
+    let any = false;
+    for (const d of sec.querySelectorAll('details')) {
+      // textContent covers the summary, the parameters and the curl example,
+      // so "2d6" finds the dice route through its parameter, not just its name
+      const hit = !v || d.textContent.toLowerCase().includes(v);
+      d.style.display = hit ? '' : 'none';
+      if (hit) { any = true; shown++; }
+      if (v && hit) d.open = true;
     }
-    g.style.display = any ? '' : 'none';
+    sec.style.display = any ? '' : 'none';
   }
-  empty.style.display = shown ? 'none' : '';
+  empty.style.display = shown ? '' : 'none';
   document.getElementById('list').style.display = shown ? '' : 'none';
 }
 box.addEventListener('input', run);
+document.addEventListener('keydown', (e) => {
+  if (e.key === '/' && document.activeElement !== box) {
+    e.preventDefault(); box.focus(); box.select();
+  } else if (e.key === 'Escape' && document.activeElement === box) {
+    box.value = ''; box.blur(); run();
+  }
+});
 run();
 
 document.addEventListener('click', async (e) => {
+  const cp = e.target.closest('[data-copy]');
+  if (cp) {
+    const text = cp.closest('pre').querySelector('code').textContent;
+    try { await navigator.clipboard.writeText(text); flash(cp, 'Copied'); }
+    catch { flash(cp, 'Ctrl+C'); }
+    return;
+  }
   const btn = e.target.closest('[data-try]');
   if (!btn) return;
   const out = btn.parentElement.querySelector('.out');
@@ -341,19 +494,13 @@ document.addEventListener('click', async (e) => {
   btn.textContent = 'requesting…';
   out.style.display = 'block';
   out.textContent = '';
-  if (!base) {
-    out.textContent = 'Set the API base URL above first.';
-    btn.textContent = 'Try it';
-    return;
-  }
+  if (!base) { out.textContent = 'Set the API base URL in the sidebar first.'; btn.textContent = 'Try it'; return; }
   const headers = {};
   const token = store.get('token');
   if (token) headers['Authorization'] = 'Bearer ' + token;
   try {
     const res = await fetch(base + btn.dataset.try, {headers});
-    const body = await res.text();
-    out.textContent = res.status + ' ' + res.statusText + '\n\n' +
-                      body.slice(0, 4000);
+    out.textContent = res.status + ' ' + res.statusText + '\n\n' + (await res.text()).slice(0, 4000);
   } catch (err) {
     out.textContent = 'failed: ' + err;
   }
