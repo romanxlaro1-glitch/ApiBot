@@ -1,0 +1,2 @@
+# ApiBot has zero third-party dependencies - pure Python stdlib.
+# This file exists so Vercel installs nothing and builds stay fast.

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+config.json
+config.example.json
+apibot.service
+INSTALL.md
+README.md
+vercel_build/
+.venv/
+.vercel/
+.git/

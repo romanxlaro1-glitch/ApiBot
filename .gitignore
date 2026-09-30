@@ -1,0 +1,7 @@
+# .gitignore
+__pycache__/
+*.pyc
+config.json
+vercel_build/
+.venv/
+.vercel/

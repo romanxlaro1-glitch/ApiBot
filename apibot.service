@@ -1,0 +1,25 @@
+[Unit]
+Description=ApiBot - REST scraper API (MPL Indonesia, JKT48, anime, games)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/ApiBot
+ExecStart=/usr/bin/python3 /root/ApiBot/api.py
+Restart=always
+RestartSec=3
+
+# Keep it tiny: the API is stdlib-only and bounded by its own cache cap.
+MemoryMax=200M
+MemoryHigh=150M
+CPUQuota=70%
+Nice=5
+OOMScoreAdjust=200
+
+StandardOutput=append:/root/.hermes/logs/apibot.log
+StandardError=append:/root/.hermes/logs/apibot.err.log
+
+[Install]
+WantedBy=multi-user.target
