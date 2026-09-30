@@ -126,27 +126,31 @@ AniList, with automatic fallback to Jikan when it returns 504.
 
 `GET /api/v1/ai/ask?prompt=...&model=gpt-5`
 
-No account anywhere. The upstream is an anonymous public chat site with a
-per-IP daily guest quota, so the order is:
+No account anywhere, no API key. Two keyless upstreams are tried in order:
 
-1. **Cache, 24 hours** per prompt, so an identical question costs one request.
-2. **Direct connection** — about 3-5 seconds while the daily quota holds.
-3. **Proxy fallback** — rotates the egress IP to get past the daily limit, and is
-   therefore slow.
+1. **text.pollinations.ai** - a plain `GET` with the prompt in the path.
+   Answers in 1-5 seconds, needs no proxy. Two things it does not document:
+   the request must carry `Referer: https://text.pollinations.ai/`, and
+   anonymous use is metered per IP at roughly one request per cooldown window,
+   so a burst right after a success is refused with `402`.
+2. **chatbotchatapp.com** - also anonymous, but capped at 5 chats per window per
+   egress IP plus an undocumented daily cap, so it needs a rotating proxy.
 
-Models: `gpt-5`, `gpt-6`, `deepseek-v4`, `glm-5.3`, `qwen3.8`, `mimo-v2.6`,
-`minimax-m3`.
+If both are out of quota the endpoint returns 429 and says so, rather than
+reporting a failure that did not happen. Results are cached 24 hours per
+prompt, so repeating a question is free and instant.
 
-Options: `&retries=0..4` per proxy, `&proxy=0` to skip the direct attempt,
-`&limit=` characters of answer.
+`&retries=0..4` sets how many times a failed proxy attempt is retried, and
+`&proxy=0` skips the direct attempt and goes straight to the pools.
 
-Without `ASK_PROXIES` this endpoint still works until the server's own IP
-exhausts its daily quota, after which it returns 429. When every route fails
-it returns 503.
+`GET /api/v1/ai/models/free` lists the 310 models the keyless upstream exposes.
+The catalogue is public even when generation is not, so it is a reliable way to
+see what exists. `?search=llama` filters it.
 
 ### Proxy configuration
 
-Only this endpoint uses a proxy. Free proxy lists are deliberately not used.
+Only the second upstream uses a proxy. Free proxy lists are deliberately not
+used.
 
 Copy `.env.example` to `.env` (mode 600, gitignored):
 
@@ -154,16 +158,12 @@ Copy `.env.example` to `.env` (mode 600, gitignored):
 ASK_PROXIES=user1@host:port,user2@host:port
 ASK_PROXY_PASSWORD=your-password
 ASK_PROXY_TIMEOUT=60
-ASK_DIRECT=0
+POLLINATIONS_TIMEOUT=45
 ```
 
-`ASK_PROXIES` accepts `user@host:host` style entries written as `user@host:port`
-(the password is taken from `ASK_PROXY_PASSWORD`), or `user:pass@host:port`.
-Both HTTP CONNECT and SOCKS5 vendors work — SOCKS5 is implemented in
-`socks5.py` because the standard library has no SOCKS client.
-
-On Vercel set the same variables in Project Settings → Env Vars, and note the
-8 MB cache is per instance and not persistent.
+`ASK_PROXIES` accepts `user@host:port` (password from `ASK_PROXY_PASSWORD`) or
+`user:pass@host:port`. Both HTTP CONNECT and SOCKS5 vendors work, and
+`socks5.py` implements SOCKS5 because the standard library has no SOCKS client.
 
 Rotating the proxy password: edit `.env`, then `systemctl restart apibot`.
 

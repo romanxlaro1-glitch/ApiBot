@@ -29,6 +29,7 @@ import ai as ai_mod
 import aiweb as aiweb_mod
 import aitools as aitools_mod
 import aiask as aiask_mod
+import pollinations as pollinations_mod
 import countries as country_mod
 import phone as phone_mod
 
@@ -1575,6 +1576,29 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
             payload["cached"] = True
             return payload
         started = time.time()
+        # Upstream 1: text.pollinations.ai. Keyless, needs no proxy, answers in
+        # a few seconds. Anonymous use is metered per IP at roughly one request
+        # per cooldown window, so a 402 here means "come back later", not
+        # "service down" - fall through to the proxy-backed route below.
+        try:
+            text, used_model, secs = pollinations_mod.ask(
+                prompt, timeout=int(_ENV.get("POLLINATIONS_TIMEOUT", "45")))
+            res = {"answer": text, "via": "pollinations", "attempts": 1,
+                   "elapsed": round(time.time() - started, 2),
+                   "route_seconds": secs, "upstream_model": used_model}
+            res.update({"model": model, "cached": False,
+                        "source": "text.pollinations.ai"})
+            CACHE.set(key, json.dumps(res), ttl=86400)
+            return res
+        except pollinations_mod.QuotaExhausted:
+            pass
+        except pollinations_mod.AskError as exc:
+            if exc.status < 500:
+                raise UpstreamError(str(exc), exc.status)
+            # a 5xx from the primary should not hide the working fallback
+            pass
+
+        # Upstream 2: chatbotchatapp.com, via the configured proxy pool.
         try:
             res = aiask_mod.ask(prompt, model=model, proxy_tries=retries + 1,
                                 direct=use_proxy,
@@ -1582,16 +1606,38 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
                                     _ENV.get("ASK_PROXIES"),
                                     _ENV.get("ASK_PROXY_PASSWORD"))
                                 if use_proxy else [])
-        except aiask_mod.QuotaExhausted as exc:
+        except aiask_mod.QuotaExhausted:
+            # Say plainly that BOTH upstreams ran out, otherwise the error reads
+            # as if only one of them was tried.
             raise UpstreamError(
-                "the free upstream is out of daily chats for this IP; the "
-                "server has no proxy pool configured (ASK_PROXIES)", 429)
+                "both keyless upstreams are out of anonymous quota for this "
+                "IP right now (text.pollinations.ai: 402, "
+                "chatbotchatapp.com: daily cap). No proxy pool is configured "
+                "(ASK_PROXIES), so there is no third route to try. Retry in a "
+                "few minutes.", 429)
         except aiask_mod.AskError as exc:
             raise UpstreamError(str(exc), exc.status if exc.status >= 400 else 502)
         res.update({"model": model, "cached": False,
                     "source": "chatbotchatapp.com"})
         CACHE.set(key, json.dumps(res), ttl=86400)
         return res
+
+    @route("GET", r"/api/v1/ai/models/free")
+    def ai_models_free(h, m, query):
+        """The model catalogue the keyless upstream exposes (no auth).
+
+        Generating needs a slot in the anonymous window, but the catalogue
+        itself is public, so this is a reliable way to see what exists."""
+        rows = pollinations_mod.models()
+        want = q(query, "search")
+        if want:
+            needle = want.lower()
+            rows = [r for r in rows
+                    if needle in (r.get("id", "") + " " + r.get("description", "")).lower()]
+        return {"count": len(rows), "source": "gen.pollinations.ai",
+                "models": [{"id": r.get("id"), "title": r.get("title"),
+                            "description": r.get("description")}
+                           for r in rows[:nq(query, "limit", 50, 1, 310)]]}
 
     # ------------------------------------------------------- phone numbers
     # Format + country + plausibility only. Nothing is ever sent to a carrier
