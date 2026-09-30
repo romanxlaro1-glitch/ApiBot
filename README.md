@@ -1,234 +1,248 @@
-# ApiBot — REST API scraper
+# ApiBot
 
-REST API buat scraping data web: esports (**MPL Indonesia**), **JKT48**,
-anime/manga, game, news, dan lain-lain. Pure Python stdlib — **tanpa dependency**,
-RAM ~42 MB, CPU ~3% di mesin 1 core.
+REST API for public data that normally needs one scraper per site: MPL ID match
+schedules and standings, JKT48 member data, Mobile Legends hero stats, game
+wikis, AI model catalogues and papers, a live anonymous AI chat endpoint, and
+phone/country data.
 
-## Jalankan
+Pure Python standard library. No dependencies, no API keys, no accounts. Every
+endpoint is either a scrape of a public page or a call to an upstream that
+does not require authentication.
+
+## Install
 
 ```bash
-cd /root/ApiBot
-python3 api.py                        # host & port dibaca dari config.json
-python3 api.py --port 18742 --host 0.0.0.0   # override
-python3 api.py --gen-token            # cetak token baru
+git clone https://github.com/romanxlaro1-glitch/ApiBot.git
+cd ApiBot
+cp config.example.json config.json     # set your own token
+python3 api.py
 ```
 
-Token digenerate otomatis saat boot pertama dan disimpan di `config.json`
-(`chmod 600`). Semua endpoint butuh auth kecuali `/health` dan
-`/api/v1/catalog`.
+Host and port come from `config.json`; `python3 api.py --port 9000` overrides
+them, and `--gen-token` prints a fresh one. `config.json` is gitignored. The
+token in it is the access token for this server, not a key for any upstream.
 
 ## Auth
 
 ```bash
-TOKEN=$(python3 -c "import json;print(json.load(open('/root/ApiBot/config.json'))['token'])")
+TOKEN=$(python3 -c "import json;print(json.load(open('config.json'))['token'])")
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:18742/api/v1/mpl/schedule
 curl "http://127.0.0.1:18742/api/v1/mpl/standings?key=$TOKEN"
 ```
 
-## Endpoint (34)
+`/health` and `/api/v1/catalog` are public.
 
-**MPL Indonesia** (scrape `id-mpl.com`)
+## Gaming
 
-| Endpoint | Isi |
+**MPL Indonesia** — scraped from `id-mpl.com`
+
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/mpl/schedule` | 72 match regular season: week, tanggal, jam WIB, skor, replay. `?team=ONIC` |
-| `/api/v1/mpl/standings` | Klasemen. `?phase=regular-season\|playoffs` |
-| `/api/v1/mpl/teams` | 9 tim + logo + nama lengkap |
-| `/api/v1/mpl/team/{slug}` | Roster (nick, role) + riwayat match. `onic`, `evos`, `rrq`, ... |
-| `/api/v1/mpl/match/{id}` | Detail: skor seri, per-game kill/durasi, KDA+gold+dmg+item+rune tiap pemain |
+| `/api/v1/mpl/schedule` | 72 regular-season matches: week, date, WIB time, score, replay. `?team=ONIC` |
+| `/api/v1/mpl/standings` | Standings. `?phase=regular-season\|playoffs` |
+| `/api/v1/mpl/teams` | 9 teams with logo and full name |
+| `/api/v1/mpl/team/{slug}` | Roster (nick, role) and match history. `onic`, `evos`, `rrq`, … |
+| `/api/v1/mpl/match/{id}` | Series score, per-game kills and duration, KDA/gold/damage/items/runes per player |
 
-**JKT48** (situs resmi Cloudflare-walled → Google News RSS + Wikipedia)
+**JKT48** — the official site sits behind Cloudflare, so news comes from Google
+News RSS and member profiles from Wikipedia
 
-| Endpoint | Isi |
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/jkt48/news` | Berita JKT48 terbaru. `?q=...&limit=30` |
-| `/api/v1/jkt48/members` | Cari member/generasi di Wikipedia. `?q=...` |
-| `/api/v1/jkt48/member/{nama}` | Ringkasan artikel member |
+| `/api/v1/jkt48/news` | Latest member news. `?q=...&limit=30` |
+| `/api/v1/jkt48/members` | Member/generation search. `?q=...` |
+| `/api/v1/jkt48/member/{name}` | Article summary |
 
-**Anime / Manga** (AniList, fallback otomatis kalau Jikan down)
+**Mobile Legends** — Fandom wiki, because the third-party API now returns 402
 
-| Endpoint | Isi |
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/anime/search?q=` | Cari anime |
-| `/api/v1/anime/{id}` | Detail anime by AniList id |
-| `/api/v1/anime/trending` | Anime sedang tayang |
-| `/api/v1/manga/search?q=` | Cari manga |
-| `/api/v1/jikan/anime/{mal_id}` | Record MyAnimeList lengkap (fallback AniList) |
-| `/api/v1/jikan/top` | Top anime. `?filter=bypopularity\|airing` |
+| `/api/v1/mlbb/heroes` | 133 heroes: title, role, specialty, lane, region, release date. `?role=Tank\|Assassin\|Mage` |
+| `/api/v1/mlbb/hero/{name}` | Single hero: table data and lore |
 
-**Game**
+**Liquid / Team Liquid** — server-rendered teamliquid.com
 
-| Endpoint | Isi |
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/game/steam/{appid}` | Detail Steam store (harga IDR) |
-| `/api/v1/game/dota/heroes` | 127 hero Dota 2 |
-| `/api/v1/game/dota/patch` | Patch Dota 2 |
-| `/api/v1/game/valorant/agents` | 30 agent Valorant |
-| `/api/v1/game/valorant/maps` | Map Valorant |
-| `/api/v1/game/pokemon/{nama\|id}` | Detail Pokemon |
-| `/api/v1/game/lol/champions` | 173 champion LoL (patch terbaru, nama ID) |
-| `/api/v1/game/lol/items` | 870 item LoL |
-| `/api/v1/game/chess/leaderboard` | Leaderboard Chess.com. `?cat=daily\|blitz\|bullet\|rapid` |
-| `/api/v1/game/chess/archives/{user}` | Arsip game bulanan |
+| `/api/v1/liquid/divisions` | 20 divisions (MLBB TLID/TLPH, Valorant, CS2, LoL, Dota 2, Apex, R6, OW2, Chess, SC2, …) |
+| `/api/v1/liquid/roster?division=mlbb/tlid` | Roster per division |
+| `/api/v1/liquid/roster/all` | All 20 rosters in one call |
+| `/api/v1/liquid/news?q=Team%20Liquid&limit=15` | Articles plus press via Google News RSS |
 
-**Games / gacha** (Fandom MediaWiki, 21 game wiki, 1 request per kategori)
+**Game wikis** — 21 Fandom MediaWiki sources, one request per category
 
-| Endpoint | Isi |
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/games` | Semua game wiki yang tersedia. `?genre=` |
-| `/api/v1/games/{slug}` | Character/boss/item/wiki. `?category=Bosses&limit=20` |
-| `/api/v1/games/{slug}/search?q=` | Cari di wiki game itu |
-| `/api/v1/games/{slug}/entry/{nama}` | Satu entry: lead image + lore |
+| `/api/v1/games` | Available game wikis. `?genre=` |
+| `/api/v1/games/{slug}` | Characters/bosses/items. `?category=Bosses&limit=20` |
+| `/api/v1/games/{slug}/search?q=` | Search one wiki |
+| `/api/v1/games/{slug}/entry/{name}` | One entry: lead image and lore |
 
-Slug: `alchemy-stars`, `arknights`, `azur-lane`, `blue-archive`, `elden-ring`,
+Slugs: `alchemy-stars`, `arknights`, `azur-lane`, `blue-archive`, `elden-ring`,
 `final-fantasy`, `fire-emblem`, `genshin`, `guardian-tales`, `honkai-starrail`,
 `kingdom-hearts`, `limbus-company`, `monster-hunter`, `onmyoji`, `overwatch`,
 `stardew-valley`, `terraria`, `undertale`, `warframe`, `wuthering-waves`,
 `zenless-zone-zero`.
 
-```bash
-curl -H "Authorization: Bearer $TOKEN" $BASE/api/v1/games/genshin?category=Playable%20Characters
-curl -H "Authorization: Bearer $TOKEN" $BASE/api/v1/games/elden-ring/entry/Malenia
+**Other game data**
+
+| Endpoint | Returns |
+|---|---|
+| `/api/v1/game/steam/{appid}` | Steam store detail, IDR price |
+| `/api/v1/game/dota/heroes`, `/game/dota/patch` | 127 heroes, current patch |
+| `/api/v1/game/valorant/agents`, `/game/valorant/maps` | 30 agents, maps |
+| `/api/v1/game/pokemon/{name\|id}` | Pokémon detail |
+| `/api/v1/game/lol/champions`, `/game/lol/items` | 173 champions, 870 items |
+| `/api/v1/game/chess/leaderboard` | Chess.com. `?cat=daily\|blitz\|bullet\|rapid` |
+| `/api/v1/game/chess/archives/{user}` | Monthly game archive |
+
+## Anime and manga
+
+AniList, with automatic fallback to Jikan when it returns 504.
+
+| Endpoint | Returns |
+|---|---|
+| `/api/v1/anime/search?q=` | Anime search |
+| `/api/v1/anime/{id}` | Detail by AniList id |
+| `/api/v1/anime/trending` | Currently airing |
+| `/api/v1/manga/search?q=` | Manga search |
+| `/api/v1/jikan/anime/{mal_id}` | Full MyAnimeList record |
+| `/api/v1/jikan/top` | Top anime. `?filter=bypopularity\|airing` |
+
+## AI
+
+| Endpoint | Returns |
+|---|---|
+| `/api/v1/ai/models` | Trending Hugging Face models. `?search=llama`, `?task=text-generation` |
+| `/api/v1/ai/papers` | Hugging Face Daily Papers (arXiv) |
+| `/api/v1/ai/catalogue` | Model catalogue with context window and pricing. `?provider=anthropic` |
+| `/api/v1/ai/news?q=AI&limit=20` | Hacker News plus Google News RSS |
+| `/api/v1/ai/tools` | 866 tools and 437 models from rewind.ai |
+| `/api/v1/ai/scrape/models` | HTML grid scrape of Hugging Face: id, likes, task, parameter count, "updated N ago" |
+| `/api/v1/ai/scrape/papers` | Daily Papers from the `data-props` JSON embedded in the page |
+| `/api/v1/ai/scrape/ollama` | Ollama library: model name and pull count |
+
+### Asking a model
+
+`GET /api/v1/ai/ask?prompt=...&model=gpt-5`
+
+No account anywhere. The upstream is an anonymous public chat site with a
+per-IP daily guest quota, so the order is:
+
+1. **Cache, 24 hours** per prompt, so an identical question costs one request.
+2. **Direct connection** — about 3-5 seconds while the daily quota holds.
+3. **Proxy fallback** — rotates the egress IP to get past the daily limit, and is
+   therefore slow.
+
+Models: `gpt-5`, `gpt-6`, `deepseek-v4`, `glm-5.3`, `qwen3.8`, `mimo-v2.6`,
+`minimax-m3`.
+
+Options: `&retries=0..4` per proxy, `&proxy=0` to skip the direct attempt,
+`&limit=` characters of answer.
+
+Without `ASK_PROXIES` this endpoint still works until the server's own IP
+exhausts its daily quota, after which it returns 429. When every route fails
+it returns 503.
+
+### Proxy configuration
+
+Only this endpoint uses a proxy. Free proxy lists are deliberately not used.
+
+Copy `.env.example` to `.env` (mode 600, gitignored):
+
+```
+ASK_PROXIES=user1@host:port,user2@host:port
+ASK_PROXY_PASSWORD=your-password
+ASK_PROXY_TIMEOUT=60
+ASK_DIRECT=0
 ```
 
-**Liquid / T1 esports** (teamliquid.com, server-rendered)
+`ASK_PROXIES` accepts `user@host:host` style entries written as `user@host:port`
+(the password is taken from `ASK_PROXY_PASSWORD`), or `user:pass@host:port`.
+Both HTTP CONNECT and SOCKS5 vendors work — SOCKS5 is implemented in
+`socks5.py` because the standard library has no SOCKS client.
 
-| Endpoint | Isi |
+On Vercel set the same variables in Project Settings → Env Vars, and note the
+8 MB cache is per instance and not persistent.
+
+Rotating the proxy password: edit `.env`, then `systemctl restart apibot`.
+
+## Phone and country data
+
+Offline, from libphonenumber's static metadata. Nothing is sent to a carrier.
+
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/liquid/divisions` | 20 divisi Team Liquid (MLBB TLID/TLPH, Valorant, CS2, LoL, Dota 2, Apex, R6, OW2, Chess, SC2, dll.) |
-| `/api/v1/liquid/roster?division=mlbb/tlid` | Roster per divisi (nama, role/team slot, gambar). Lihat `/api/v1/liquid/divisions` |
-| `/api/v1/liquid/roster/all` | Semua roster 20 divisi (1 panggilan, 20 upstream request) |
-| `/api/v1/liquid/news?q=Team%20Liquid&limit=15` | Artikel teamliquid.com + press via Google News RSS |
+| `/api/v1/phone/validate?number=+628123456789&region=ID` | E.164 form, real region, length plausibility |
+| `/api/v1/country/list?limit=250&offset=0` | All 206 entries: calling code, name, flag, search code |
+| `/api/v1/country/detect?number=+249123456789` | Calling code, country, national part, picker search terms, verification code |
 
-**AI / ML** (tanpa API key, tanpa signup, tanpa biaya — semua anonymous)
+`phone/validate` accepts national and E.164 formats and resolves shared calling
+codes correctly (+1 NANP, +7 RU/KZ, +376 Andorra).
 
-| Endpoint | Isi |
+`country/detect` does longest-prefix matching, which is required because 160 of
+the 206 codes are three digits. It returns `target_code` — the code the chosen
+option must be verified against, which is what keeps +249 Sudan from selecting
++211 Sudan Selatan. An unrecognised number falls back to `+62` with
+`fallback_used: true`; a number with no digits is rejected with 400 rather than
+quietly becoming Indonesia.
+
+## Misc
+
+| Endpoint | Returns |
 |---|---|
-| `/api/v1/ai/models?search=&task=&limit=20` | Trending Hugging Face models. `?search=llama`, `?task=text-generation` |
-| `/api/v1/ai/papers?limit=20` | Hugging Face Daily Papers (arXiv AI/ML) |
-| `/api/v1/ai/catalogue?provider=&limit=40` | OpenRouter model catalogue (context, per-1M USD, reasoning). `?provider=anthropic` |
-| `/api/v1/ai/news?q=AI&limit=20` | Hacker News + Google News RSS |
-
-**AI — tanya model (butuh proxy buat kuota)** ⚠️
-
-| Endpoint | Isi |
-|---|---|
-| `/api/v1/ai/ask?prompt=...&model=gpt-5` | Tanya AI, jawaban di-cache 24 jam per prompt |
-| `&model=` | `gpt-5`, `gpt-6`, `deepseek-v4`, `glm-5.3`, `qwen3.8`, `mimo-v2.6`, `minimax-m3` |
-| `&retries=0..4` | berapa kali retry tiap proxy (default 1) |
-| `&proxy=0` | lewati koneksi direct, langsung ke pool |
-
-Sumber: **chatbotchatapp.com** — anonymous, tanpa akun, tanpa key. Tapi ada
-batas per IP: 5 request per window + kuota harian (nilai dobok nggak diumumkan,
-teramati 5). Karena itu urutannya:
-
-1. **Cache 24 jam** — prompt yang sama cuma sekali panggil upstream
-2. **Direct** — cepat (3-5 detik) selama kuota harian belum habis
-3. **Proxy pool** — IP egress dirotasi, jadi lewat batas harian, tapi lambat
-
-Konfigurasi proxy (env var, **nggak pernah** masuk `config.json` atau git):
-
-```bash
-export ASK_PROXIES="mob-id@gw.proxyrise.com:443,mob-sg@gw.proxyrise.com:443"
-export ASK_PROXY_PASSWORD="password-mu"
-export ASK_PROXY_TIMEOUT=45        # detik per percobaan proxy (default 60)
-export ASK_DIRECT=0                # lewati direct, langsung ke proxy
-```
-
-Tanpa `ASK_PROXIES`, endpoint ini tetap jalan selama kuota harian IP server
-belum habis; setelah itu balas **429**. Semua kegagalan balas **503** — client
-nggak pernah nunggu lebih dari `ASK_PROXY_TIMEOUT`.
-
-> Di Vercel (serverless)_atur env var yang sama di Project Settings → Env Vars.
-> Cache 8MB per instance nggak persisten, jadi prompt yang sering diulang akan
-> request baru tiap kali.
-
-**AI — pure HTML scrape (nol JSON API)**
-
-| Endpoint | Isi |
-|---|---|
-| `/api/v1/ai/scrape/models?sort=trending\|downloads\|likes&task=&limit=30` | Grid HTML Hugging Face: id, likes, task, param count, "updated N ago" |
-| `/api/v1/ai/scrape/papers?limit=20` | HF Daily Papers dari `data-props` JSON di halaman (43 paper/hari) |
-| `/api/v1/ai/scrape/ollama?limit=40` | Ollama library dari HTML: nama model + pull count |
-
-**MLBB** (scrape wiki Fandom — API pihak ketiga sudah mati)
-
-| Endpoint | Isi |
-|---|---|
-| `/api/v1/mlbb/heroes` | 133 hero: title, role, specialty, lane, region, tanggal rilis. `?role=Tank\|Assassin\|Mage\|...` |
-| `/api/v1/mlbb/hero/{nama}` | Satu hero: data tabel + lore (nama asli, umur, asal, story) |
-
-**Lain-lain**
-
-| Endpoint | Isi |
-|---|---|
-| `/api/v1/news/{query}` | Berita apa pun via Google News RSS |
-| `/api/v1/wiki/search?q=` | Cari di Wikipedia ID |
-| `/api/v1/wiki/page/{judul}` | Ringkasan artikel Wikipedia |
-| `/api/v1/country/{kode}` | Info negara by ISO code |
-| `/api/v1/book/{judul}` | Cari buku (Open Library) |
-| `/api/v1/tv/{judul}` | Cari serial TV (TVMaze) |
+| `/api/v1/news/{query}` | Any news topic via Google News RSS |
+| `/api/v1/wiki/search?q=` | Indonesian Wikipedia search |
+| `/api/v1/wiki/page/{title}` | Wikipedia article summary |
+| `/api/v1/country/{code}` | Country info by ISO code |
+| `/api/v1/book/{title}` | Open Library search |
+| `/api/v1/tv/{title}` | TVMaze search |
 | `/api/v1/tech/news` | Hacker News top stories |
-| `/api/v1/fact/cat` | Fakta kucing random |
+| `/api/v1/fact/cat` | Random cat fact |
 
-Plus `/api/v1/catalog` (daftar semua endpoint) dan `/api/v1/openapi.json`.
+`/api/v1/catalog` lists every endpoint, and `/api/v1/openapi.json` is a full
+OpenAPI document.
 
-## Port
+## Configuration
 
-`18742` (bukan 8080). Ubah di `config.json` (`host`/`port`).
-
-## Resource budget
-
-| Setting | Default | Arti |
+| Key | Default | Meaning |
 |---|---|---|
-| `cache_max_bytes` | 8 MB | cache TTL+LRU, tidak pernah tumbuh |
-| `cache_max_entries` | 400 | batas jumlah entri |
-| `max_concurrency` | 6 | fetch upstream paralel maksimum (sisanya antre) |
-| `max_upstream_bytes` | 12 MB | tolak respons upstream lebih besar |
-| `upstream_timeout` | 15 s | timeout per fetch |
-| rate limit | per-host | token bucket, mis. AniList 40/menit, id-mpl 20/menit |
+| `cache_max_bytes` | 8 MB | TTL+LRU cache, bounded |
+| `cache_max_entries` | 400 | Entry cap |
+| `max_concurrency` | 6 | Parallel upstream fetches; the rest queue |
+| `max_upstream_bytes` | 12 MB | Reject larger upstream responses |
+| `upstream_timeout` | 15 s | Per-fetch timeout |
 
-Terukur: **CPU 2.9% dari 1 core**, **RAM 42→43 MB** saat 48 request cache-miss
-dengan 6 thread paralel. Service idle: ~11 MB.
+Rate limits are token buckets per upstream host, not per caller: AniList
+40/min, id-mpl.com 20/min, and so on. Responses are cached in memory only, so
+nothing grows on disk.
 
-## Auto-start
+## Deploy
 
-Jalan sebagai systemd service (`/etc/systemd/system/apibot.service`):
-`systemctl {status,restart,stop} apibot` — enabled, otomatis hidup saat reboot.
-Batas resource dipasang di unit: `MemoryHigh=150M`, `MemoryMax=200M`,
-`CPUQuota=70%`.
+**systemd** — `apibot.service` is included:
 
 ```bash
-systemctl status apibot        # cek
-systemctl restart apibot       # restart
-journalctl -u apibot -n 50     # log
-tail -f /root/.hermes/logs/apibot.err.log
+cp apibot.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now apibot
+systemctl status apibot
 ```
 
-## Catatan
+It runs as a single process with `MemoryHigh`/`MemoryMax` and a `CPUQuota`
+ceiling in the unit, and reads `.env` via `EnvironmentFile`.
 
-- `/api/v1/mlbb/*` memakai wiki Fandom karena API pihak ketiga
-  (ml-api-psi.vercel.app) sudah balas 402 — deployment dimatikan. Wiki Fandom
-  jalan tanpa key.
-- Situs JKT48 (`jkt48.com`) dilindungi Cloudflare, jadi berita diambil lewat
-  Google News RSS dan profil member lewat Wikipedia.
-- Jikan (`api.jikan.moe`) sering balas 504; endpoint `/jikan/*` otomatis
-  fallback ke AniList supaya tetap 200.
-- Rate limit dan cache sama-sama dijaga di memori; tidak ada file cache, jadi
-  tidak ada pertumbuhan disk.
+**Vercel** — `vercel.json` rewrites every path to `api/index.py`. The repository
+can stay private.
 
-## Negara — selector (offline, 206 entri)
+**GitHub Pages** is not used. It serves static files only and cannot run this
+server, and it is unavailable for private repositories on the free plan.
 
-Tabel negara yang dipakai form WhatsApp: calling code -> (nama Indonesia,
-bendera, kode pencarian). Dipisah dari pengiriman apa pun.
+## Notes
 
-- `GET /api/v1/country/list?limit=250&offset=0` — semua 206 entri.
-- `GET /api/v1/country/detect?number=%2B628123456789`
-
-`detect` mengembalikan `calling_code`, `country`, `flag`, `local_number`
-(bagian nasional tanpa kode negara), `search_terms` (coba nama dulu, lalu kode
-polos) dan `target_code` — kode yang harus jadi acuan verifikasi setelah klik,
-dan itu yang mencegah +249 Sudan terpilih jadi +211 Sudan Selatan. Pencocokan
-longest-prefix dulu karena 160 kode berpanjang 3 digit. Nomor tak dikenal
-jatuh ke default `+62` dengan `fallback_used: true`; nomor tanpa digit
-ditolak 400, bukan diam-diam jadi Indonesia.
+- The JKT48 site is behind Cloudflare, so that data comes from Google News RSS
+  and Wikipedia instead.
+- `api.jikan.moe` frequently returns 504, so `/api/v1/jikan/*` falls back to
+  AniList to stay up.
+- `/api/v1/mlbb/*` uses the Fandom wiki because the third-party API
+  (`ml-api-psi.vercel.app`) now answers 402.
+- The server keeps no per-user state and does not log request bodies.

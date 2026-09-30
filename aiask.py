@@ -44,6 +44,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from urllib.parse import quote
 
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36")
@@ -103,18 +104,45 @@ def parse_pools(spec, password):
             continue
         host, _, port = hp.partition(":")
         pools.append((host + ":" + (port or "443"), _proxy_auth(user, pw),
-                      user))
+                      quote(user, safe="") + ":" + quote(pw, safe="")))
     return pools
 
 
+class _AuthProxyHandler(urllib.request.ProxyHandler):
+    """ProxyHandler that actually authenticates the CONNECT tunnel.
+
+    urllib's stock handler puts the userinfo from the proxy URL into
+    req.set_host(), but it does NOT add a Proxy-Authorization header, and
+    gw.proxyrise.com answers 407 without one. Overriding set_tunnel is the
+    documented hook: the headers we pass are merged into the CONNECT request.
+    """
+
+    def __init__(self, proxies, header_value):
+        self._auth = header_value
+        super().__init__(proxies)
+
+    def set_tunnel(self, host, headers=None):
+        headers = dict(headers or {})
+        if self._auth:
+            headers["Proxy-Authorization"] = "Basic " + self._auth
+        return super().set_tunnel(host, headers)
+
+
 def _opener(auth, timeout):
+    """auth is (hostport, "user:pass", basic_b64) or None for direct."""
     cj = http.cookiejar.CookieJar()
     if auth:
+        hostport, creds, basic_b64 = auth
+        # urllib's _parse_proxy splits userinfo on the FIRST ":" only, so the
+        # user and the password must each be percent-encoded separately - a
+        # raw "user:pass" collapses into (user, None) and no auth is sent.
+        user, _, pw = creds.partition(":")
+        proxy_url = "http://%s:%s@%s" % (quote(user, safe=""),
+                                         quote(pw, safe=""), hostport)
         op = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(cj),
-            urllib.request.ProxyHandler({"https": auth[0]}))
-        op.addheaders = [("User-Agent", UA), ("Accept", "*/*"),
-                         ("Proxy-Authorization", "Basic " + auth[1])]
+            _AuthProxyHandler({"http": proxy_url, "https": proxy_url}, basic_b64))
+        op.addheaders = [("User-Agent", UA), ("Accept", "*/*")]
     else:
         op = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(cj),
@@ -213,8 +241,11 @@ def ask(prompt, model="gpt-5", proxy_tries=1, direct=True,
     routes = []
     if direct and os.environ.get("ASK_DIRECT", "1") != "0":
         routes.append((None, "direct"))
-    for hostport, auth, user in pools:
-        routes.append(((hostport, auth), "proxy:%s" % user))
+    for hostport, auth_b64, creds_label in pools:
+        # (hostport, "user:pass", basic_b64): the opener rebuilds the proxy URL
+        # and injects Proxy-Authorization on the CONNECT - see _AuthProxyHandler.
+        routes.append(((hostport, creds_label, auth_b64),
+                       "proxy:%s" % creds_label.split(":")[0]))
     routes = routes[:1] if not direct and not pools else routes
 
     started = time.time()
