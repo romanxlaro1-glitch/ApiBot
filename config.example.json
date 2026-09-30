@@ -1,0 +1,13 @@
+{
+  "host": "0.0.0.0",
+  "port": 18742,
+  "token": "replace-with-a-long-random-string",
+  "cache_ttl_default": 300,
+  "cache_ttl_long": 1800,
+  "cache_max_bytes": 8388608,
+  "cache_max_entries": 400,
+  "max_upstream_bytes": 12582912,
+  "max_concurrency": 6,
+  "upstream_timeout": 15,
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+}

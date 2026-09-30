@@ -37,7 +37,8 @@ import phone as phone_mod
 
 # Free-proxy pool for /ai/ask, probed in the background. Reads a local file the
 # operator refreshes; when it is missing or empty the route just uses no proxy.
-_FREE_PROXY_FILE = "/root/ApiBot/free_proxies.json"
+_FREE_PROXY_FILE = (os.environ.get("ASK_FREE_PROXIES")
+                    or "/root/ApiBot/free_proxies.json")
 _free_proxies = {"list": [], "checked": 0, "at": 0.0}
 FREE_PROXY_MAX_AGE = 3600
 
