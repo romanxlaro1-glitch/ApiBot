@@ -143,6 +143,12 @@ prompt, so repeating a question is free and instant.
 `&retries=0..4` sets how many times a failed proxy attempt is retried, and
 `&proxy=0` skips the direct attempt and goes straight to the pools.
 
+`&wait=0..300` makes the endpoint block instead of giving up. The anonymous
+window on the first upstream measured a steady 60.5 second cooldown, so
+`&wait=120` will poll every 12 seconds until a slot opens and then return the
+answer rather than a 429. The default is 0, which never blocks. The response
+reports how many polls it took in `waited_polls`.
+
 `GET /api/v1/ai/models/free` lists the 310 models the keyless upstream exposes.
 The catalogue is public even when generation is not, so it is a reliable way to
 see what exists. `?search=llama` filters it.

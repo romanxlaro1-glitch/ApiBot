@@ -1568,6 +1568,11 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
         model = q(query, "model", "gpt-5")
         retries = nq(query, "retries", 1, 0, 4)
         use_proxy = q(query, "proxy", "1") != "0"
+        # &wait=seconds: the anonymous window on the first upstream is closed
+        # most of the time, so a client that can block gets a real answer
+        # instead of an immediate 429. Capped, because an unbounded wait would
+        # just hold a thread.
+        wait_for = nq(query, "wait", 0, 0, 300)
         key = "aiask|%s|%s" % (model, hashlib.sha256(
             prompt.encode("utf8")).hexdigest()[:32])
         hit = CACHE.get(key)
@@ -1580,23 +1585,32 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
         # a few seconds. Anonymous use is metered per IP at roughly one request
         # per cooldown window, so a 402 here means "come back later", not
         # "service down" - fall through to the proxy-backed route below.
-        try:
-            text, used_model, secs = pollinations_mod.ask(
-                prompt, timeout=int(_ENV.get("POLLINATIONS_TIMEOUT", "45")))
-            res = {"answer": text, "via": "pollinations", "attempts": 1,
-                   "elapsed": round(time.time() - started, 2),
-                   "route_seconds": secs, "upstream_model": used_model}
-            res.update({"model": model, "cached": False,
-                        "source": "text.pollinations.ai"})
-            CACHE.set(key, json.dumps(res), ttl=86400)
-            return res
-        except pollinations_mod.QuotaExhausted:
-            pass
-        except pollinations_mod.AskError as exc:
-            if exc.status < 500:
-                raise UpstreamError(str(exc), exc.status)
-            # a 5xx from the primary should not hide the working fallback
-            pass
+        poll_timeout = int(_ENV.get("POLLINATIONS_TIMEOUT", "45"))
+        poll_deadline = time.time() + wait_for
+        polls = 0
+        while True:
+            try:
+                text, used_model, secs = pollinations_mod.ask(
+                    prompt, timeout=poll_timeout)
+                res = {"answer": text, "via": "pollinations", "attempts": 1,
+                       "waited_polls": polls,
+                       "elapsed": round(time.time() - started, 2),
+                       "route_seconds": secs, "upstream_model": used_model}
+                res.update({"model": model, "cached": False,
+                            "source": "text.pollinations.ai"})
+                CACHE.set(key, json.dumps(res), ttl=86400)
+                return res
+            except pollinations_mod.QuotaExhausted:
+                # Only a client that asked to wait gets to wait; the default
+                # path falls through immediately to the proxy-backed upstream.
+                if time.time() >= poll_deadline:
+                    break
+                polls += 1
+                time.sleep(min(12, max(0, poll_deadline - time.time())))
+            except pollinations_mod.AskError as exc:
+                if exc.status < 500:
+                    raise UpstreamError(str(exc), exc.status)
+                break
 
         # Upstream 2: chatbotchatapp.com, via the configured proxy pool.
         try:
