@@ -325,6 +325,25 @@ def route(method, pattern, *, public=False, name=None):
     return deco
 
 
+def _summary_and_description(doc):
+    """Split a docstring into OpenAPI's summary and description.
+
+    OpenAPI's summary is meant to be a complete, self-contained sentence. Taking
+    only the first line of a wrapped docstring produced things like "A pity rule
+    forces an SSR after" in the docs, which reads as a bug rather than a
+    sentence. The first line is the summary; the rest joins into description.
+    """
+    if not doc:
+        return {"summary": ""}
+    parts = doc.rstrip("\n").splitlines()
+    summary = parts[0].strip() if parts else ""
+    out = {"summary": re.sub(r"\s+", " ", summary)}
+    rest = [p.strip() for p in parts[1:] if p.strip()]
+    if rest:
+        out["description"] = re.sub(r"\s+", " ", " ".join(rest))
+    return out
+
+
 sources.register_routes(route, fetch, fetch_json, UpstreamError, CACHE, _cfg)
 
 
@@ -455,7 +474,11 @@ class Handler(BaseHTTPRequestHandler):
             ]
             paths[path] = {
                 "get": {
-                    "summary": (fn.__doc__ or "").strip().split("\n")[0],
+                    # The whole docstring, not just its first line: a summary
+                    # cut mid-sentence ("A pity rule forces an SSR after") reads
+                    # as a bug to anyone skimming the docs. OpenAPI has a place
+                    # for the rest, so use it.
+                    **_summary_and_description(fn.__doc__),
                     "security": [] if public else [{"bearerAuth": []}],
                     "parameters": params,
                     "responses": {"200": {"description": "OK"},
@@ -483,7 +506,7 @@ class Handler(BaseHTTPRequestHandler):
         for method, _rx, fn, public, name in ROUTES:
             if method != "GET":
                 continue
-            doc = (fn.__doc__ or "").strip().split("\n")[0]
+            doc = _summary_and_description(fn.__doc__ or "")["summary"]
             parts = name.split("/")
             # /api/v1/<group>/<rest...> -> group
             grp = parts[3] if len(parts) > 3 else "misc"

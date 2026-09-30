@@ -52,14 +52,26 @@ def group_of(path):
 
 
 def collect(spec):
+    """Flatten the OpenAPI paths into what the page renders.
+
+    The OpenAPI summary is only the first line of each route's docstring, which
+    routinely cuts a thought in half - "A pity rule forces an SSR after" is
+    where the docstring's second line picks up. Rejoining the continuation here
+    means the page shows the whole sentence, and the clamp then hides only what
+    genuinely does not fit.
+    """
     rows = []
     for path, ops in spec["paths"].items():
         op = ops.get("get") or {}
         params = op.get("parameters", [])
         query = [p["name"] for p in params if p.get("in") == "query"]
+        summary = (op.get("summary") or "").strip()
+        extra = (op.get("description") or "").strip()
+        if extra:
+            summary = (summary + " " + extra).strip()
         rows.append({
             "path": path,
-            "summary": op.get("summary", "").strip(),
+            "summary": re.sub(r"\s+", " ", summary),
             "public": not op.get("security"),
             "query": query,
         })
