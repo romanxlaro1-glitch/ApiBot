@@ -150,7 +150,9 @@ TEMPLATE = r"""<!doctype html>
   .none { padding:40px 0; color:var(--dim); text-align:center }
   .connect { padding:20px 0 4px;
              display:flex; gap:10px; flex-wrap:wrap; align-items:center }
-  .connect input { flex:1; min-width:230px }
+  .connect input { flex:1; min-width:190px }
+  .connect #save { flex:0 0 auto }
+  @media (max-width:430px) { .connect #save { flex:1 0 100%% } }
   .connect .note { width:100%%; color:var(--dim); font-size:12.5px }
   footer { max-width:1080px; margin:0 auto; padding:22px 24px 60px;
            color:var(--dim); font-size:13px; border-top:1px solid var(--line) }
@@ -170,9 +172,9 @@ TEMPLATE = r"""<!doctype html>
 </header>
 <main>
   <div class="connect">
-    <input id="base" placeholder="API base URL, e.g. http://your-host:18742"
+    <input id="base" placeholder="API base URL (e.g. http://host:18742)"
            autocomplete="off" spellcheck="false">
-    <input id="tok" type="password" placeholder="Bearer token (optional for public routes)"
+    <input id="tok" type="password" placeholder="Bearer token"
            autocomplete="off" spellcheck="false">
     <button id="save" type="button">Save</button>
     <div class="note">Saved in this browser only. The docs page is static and
@@ -180,7 +182,7 @@ TEMPLATE = r"""<!doctype html>
       unless the route is marked as needing no key.</div>
   </div>
   <div class="search">
-    <input id="q" placeholder="Search paths, descriptions and query parameters…"
+    <input id="q" placeholder="Search paths, params, descriptions…"
            autocomplete="off" spellcheck="false">
   </div>
   <div id="list">%(body)s</div>
