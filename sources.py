@@ -29,6 +29,8 @@ import ai as ai_mod
 import aiweb as aiweb_mod
 import aitools as aitools_mod
 import aiask as aiask_mod
+import countries as country_mod
+import phone as phone_mod
 
 # Proxy pools for /ai/ask are read from the process environment only, so
 # credentials never land in config.json or in a commit.
@@ -1591,6 +1593,65 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
         CACHE.set(key, json.dumps(res), ttl=86400)
         return res
 
+    # ------------------------------------------------------- phone numbers
+    # Format + country + plausibility only. Nothing is ever sent to a carrier
+    # and no account is needed: the data is libphonenumber's static metadata.
+    @route("GET", r"/api/v1/phone/validate")
+    def phone_validate(h, m, query):
+        """Validate a phone number. ?number= required, accepts +62..., 0812...
+
+        Returns the E.164 form, calling code, region, digit count and whether
+        the length matches what that country actually issues."""
+        num = q(query, "number", required=True)
+        region = q(query, "region")
+        e164, why = phone_mod.to_e164(num, region)
+        if not e164:
+            raise UpstreamError(why or "could not read that number", 400)
+        meta, _ = fetch(phone_mod.PHONEMETA_URL, ttl=long, rate_per_min=4,
+                        burst=1, cache_key="phone|meta",
+                        headers={"Accept": "*/*"})
+        table = _phone_meta(meta)
+        res = phone_mod.validate(e164, table, region_hint=region)
+        res["split"] = phone_mod.format_e164(res.get("e164") or "")
+        res["country"] = phone_mod.country_name(
+            (res.get("country_calling_code") or "+")[1:])
+        return res
+
+    # --------------------------------------------------- country table
+    # The 206-entry calling-code -> (name, flag, search code) table the form's
+    # country picker is driven from, plus longest-prefix detection. Offline:
+    # it is a dict in countries.py, no request leaves the server.
+    @route("GET", r"/api/v1/country/list")
+    def country_list(h, m, query):
+        """All 206 entries: calling code, Indonesian name, flag, search code.
+
+        ?limit= (default 250) &offset= (0) to page it."""
+        rows = country_mod.all_countries()
+        off = nq(query, "offset", 0, 0, len(rows))
+        lim = nq(query, "limit", 250, 1, 500)
+        return {"count": len(rows), "offset": off, "limit": lim,
+                "total": len(rows), "countries": rows[off:off + lim]}
+
+    @route("GET", r"/api/v1/country/detect")
+    def country_detect(h, m, query):
+        """Which country is this number in, and what the picker should get.
+
+        ?number= required. Also returns the national part to type, the search
+        terms to try in the form's country box (name, then bare code), and the
+        code the option must be verified against - that check is what keeps
+        +249 Sudan from selecting +211 Sudan Selatan."""
+        num = q(query, "number", required=True)
+        # q() strips, so a ?number= of only spaces arrives here as None and a
+        # missing one raises already. Either way there is nothing to detect, and
+        # defaulting would hand back a confident wrong country (+62).
+        if not num or not "".join(ch for ch in str(num) if ch.isdigit()):
+            raise UpstreamError(
+                "number has no digits: %r" % (num,), 400)
+        c = country_mod.search_candidates(num)
+        c["fallback_used"] = not c.pop("matched_exact")
+        c["table_size"] = len(country_mod.COUNTRIES)
+        return c
+
     # ----------------------------------------------------------------- misc
     @route("GET", r"/api/v1/wiki/search")
     def wiki_search(h, m, query):
@@ -1703,6 +1764,17 @@ def register_routes(route, fetch, fetch_json, UpstreamError, CACHE, cfg):
 def _qp(s):
     from urllib.parse import quote_plus
     return quote_plus(s)
+
+
+_PHONE_TABLE = {}
+
+
+def _phone_meta(xml):
+    """Parse libphonenumber metadata once per process and reuse it."""
+    global _PHONE_TABLE
+    if not _PHONE_TABLE:
+        _PHONE_TABLE = phone_mod._parse_metadata(xml)
+    return _PHONE_TABLE
 
 
 def _mpl_season(html):

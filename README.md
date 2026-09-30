@@ -216,3 +216,19 @@ tail -f /root/.hermes/logs/apibot.err.log
   fallback ke AniList supaya tetap 200.
 - Rate limit dan cache sama-sama dijaga di memori; tidak ada file cache, jadi
   tidak ada pertumbuhan disk.
+
+## Negara — selector (offline, 206 entri)
+
+Tabel negara yang dipakai form WhatsApp: calling code -> (nama Indonesia,
+bendera, kode pencarian). Dipisah dari pengiriman apa pun.
+
+- `GET /api/v1/country/list?limit=250&offset=0` — semua 206 entri.
+- `GET /api/v1/country/detect?number=%2B628123456789`
+
+`detect` mengembalikan `calling_code`, `country`, `flag`, `local_number`
+(bagian nasional tanpa kode negara), `search_terms` (coba nama dulu, lalu kode
+polos) dan `target_code` — kode yang harus jadi acuan verifikasi setelah klik,
+dan itu yang mencegah +249 Sudan terpilih jadi +211 Sudan Selatan. Pencocokan
+longest-prefix dulu karena 160 kode berpanjang 3 digit. Nomor tak dikenal
+jatuh ke default `+62` dengan `fallback_used: true`; nomor tanpa digit
+ditolak 400, bukan diam-diam jadi Indonesia.
